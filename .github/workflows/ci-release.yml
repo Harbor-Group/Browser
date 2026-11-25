@@ -48,9 +48,8 @@ jobs:
           submodules: recursive
           token: ${{ steps.harbor-bot.outputs.token }}
       - run: if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
 
   build-and-release:
     name: Build Windows Bundle & Release
