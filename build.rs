@@ -3,24 +3,23 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn find_rc_exe() -> Option<PathBuf> {
-    // 1. Check if rc.exe is in PATH
+    // I check PATH for rc.exe before searching Windows Kits.
     if Command::new("rc.exe").arg("/?").output().is_ok() {
         return Some(PathBuf::from("rc.exe"));
     }
 
-    // 2. Search Windows Kits paths
     let kits_root = Path::new(r"C:\Program Files (x86)\Windows Kits\10\bin");
-    if kits_root.exists() {
-        if let Ok(entries) = std::fs::read_dir(kits_root) {
-            let mut versions: Vec<PathBuf> = entries
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.is_dir() && p.join("x64").join("rc.exe").exists())
-                .collect();
-            versions.sort();
-            if let Some(newest) = versions.last() {
-                return Some(newest.join("x64").join("rc.exe"));
-            }
+    if kits_root.exists()
+        && let Ok(entries) = std::fs::read_dir(kits_root)
+    {
+        let mut versions: Vec<PathBuf> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && p.join("x64").join("rc.exe").exists())
+            .collect();
+        versions.sort();
+        if let Some(newest) = versions.last() {
+            return Some(newest.join("x64").join("rc.exe"));
         }
     }
 
