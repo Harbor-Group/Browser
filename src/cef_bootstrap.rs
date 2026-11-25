@@ -123,6 +123,10 @@ pub fn maybe_bootstrap_and_launch() -> Result<bool, Box<dyn std::error::Error>> 
     let target_dir = runtime_dir(exe_dir);
     if !is_runtime_ready(&target_dir) {
         download_with_modal(&target_dir)?;
+    } else if target_dir.join("archive.json").is_file()
+        && !target_dir.join("cef_integrity.json").is_file()
+    {
+        write_cef_integrity_manifest(&target_dir)?;
     }
     sync_app_files(exe_dir, &target_dir)?;
 
@@ -499,8 +503,51 @@ fn run_download_and_extract(
     )
     .map_err(|e| format!("Failed writing archive.json: {e}"))?;
 
+    write_cef_integrity_manifest(target_dir)?;
+
     post_progress(hwnd_raw, 100);
     post_status(hwnd_raw, "Ready. Launching Harbor Browser...");
+    Ok(())
+}
+
+fn write_cef_integrity_manifest(target_dir: &Path) -> Result<(), String> {
+    let mut files = HashMap::new();
+    let entries = fs::read_dir(target_dir)
+        .map_err(|e| format!("Failed reading {}: {e}", target_dir.display()))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("harbor.dll") {
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
+        if matches!(ext, "dll" | "bin" | "pak" | "dat") || name == "vk_swiftshader_icd.json" {
+            let bytes =
+                fs::read(&path).map_err(|e| format!("Failed reading {}: {e}", path.display()))?;
+            files.insert(
+                name.to_string(),
+                shared_protocol::crypto::sha256_hex(&bytes),
+            );
+        }
+    }
+    let manifest = serde_json::json!({
+        "cef_version": CEF_VERSION,
+        "files": files,
+        "expected_signer_thumbprint": serde_json::Value::Null,
+    });
+    fs::write(
+        target_dir.join("cef_integrity.json"),
+        serde_json::to_vec_pretty(&manifest).unwrap_or_default(),
+    )
+    .map_err(|e| format!("Failed writing cef_integrity.json: {e}"))?;
     Ok(())
 }
 
