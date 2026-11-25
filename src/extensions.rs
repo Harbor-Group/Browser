@@ -193,7 +193,9 @@ fn collect_package_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, Strin
     let root_meta = fs::symlink_metadata(root)
         .map_err(|_| "Extension folder does not exist or cannot be read.".to_string())?;
     if !root_meta.is_dir() || is_reparse_or_symlink(&root_meta) {
-        return Err("Extension source must be a regular directory (not a symlink or reparse point).".into());
+        return Err(
+            "Extension source must be a regular directory (not a symlink or reparse point).".into(),
+        );
     }
 
     let mut files = BTreeMap::new();
@@ -201,8 +203,8 @@ fn collect_package_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, Strin
     let mut stack = vec![(root.to_path_buf(), String::new())];
 
     while let Some((dir, prefix)) = stack.pop() {
-        let entries = fs::read_dir(&dir)
-            .map_err(|e| format!("Failed reading extension directory: {e}"))?;
+        let entries =
+            fs::read_dir(&dir).map_err(|e| format!("Failed reading extension directory: {e}"))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("Failed reading extension entry: {e}"))?;
             let path = entry.path();
@@ -237,8 +239,7 @@ fn collect_package_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, Strin
                 if total_bytes > MAX_EXTENSION_BYTES {
                     return Err("Extension exceeds maximum package size of 10 MB.".into());
                 }
-                let bytes = fs::read(&path)
-                    .map_err(|e| format!("Failed reading '{rel}': {e}"))?;
+                let bytes = fs::read(&path).map_err(|e| format!("Failed reading '{rel}': {e}"))?;
                 files.insert(rel, bytes);
             } else {
                 return Err(format!("Unsupported file type for '{rel}'."));
@@ -261,9 +262,7 @@ pub fn review_unpacked(source_dir: &Path, workspace: SpaceKind) -> Result<Extens
 
 pub fn extract_cws_id(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
-    let is_cws_id = |s: &str| {
-        s.len() == 32 && s.bytes().all(|b| (b'a'..=b'p').contains(&b))
-    };
+    let is_cws_id = |s: &str| s.len() == 32 && s.bytes().all(|b| (b'a'..=b'p').contains(&b));
     if is_cws_id(trimmed) {
         return Some(trimmed.to_string());
     }
@@ -294,7 +293,9 @@ pub fn parse_crx_or_zip(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, Strin
         let offset = match version {
             3 => {
                 let header_len = read_u32_le(bytes, 8).ok_or("Truncated CRX3 header.")? as usize;
-                12usize.checked_add(header_len).ok_or("Invalid CRX3 header size.")?
+                12usize
+                    .checked_add(header_len)
+                    .ok_or("Invalid CRX3 header size.")?
             }
             2 => {
                 let pub_len = read_u32_le(bytes, 8).ok_or("Truncated CRX2 header.")? as usize;
@@ -324,7 +325,9 @@ pub fn parse_crx_or_zip(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, Strin
     let entry_count = read_u16_le(zip_bytes, eocd_pos + 10).ok_or("Invalid ZIP EOCD.")? as usize;
     let cd_offset = read_u32_le(zip_bytes, eocd_pos + 16).ok_or("Invalid ZIP CD offset.")? as usize;
     if entry_count > MAX_EXTENSION_FILES * 2 {
-        return Err(format!("Extension exceeds maximum of {MAX_EXTENSION_FILES} files."));
+        return Err(format!(
+            "Extension exceeds maximum of {MAX_EXTENSION_FILES} files."
+        ));
     }
 
     let mut files = BTreeMap::new();
@@ -336,11 +339,15 @@ pub fn parse_crx_or_zip(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, Strin
             return Err("Corrupt ZIP central directory entry.".into());
         }
         let method = read_u16_le(zip_bytes, pos + 10).ok_or("Invalid ZIP method.")?;
-        let comp_size = read_u32_le(zip_bytes, pos + 20).ok_or("Invalid ZIP compressed size.")? as usize;
+        let comp_size =
+            read_u32_le(zip_bytes, pos + 20).ok_or("Invalid ZIP compressed size.")? as usize;
         let name_len = read_u16_le(zip_bytes, pos + 28).ok_or("Invalid ZIP name length.")? as usize;
-        let extra_len = read_u16_le(zip_bytes, pos + 30).ok_or("Invalid ZIP extra length.")? as usize;
-        let comment_len = read_u16_le(zip_bytes, pos + 32).ok_or("Invalid ZIP comment length.")? as usize;
-        let local_off = read_u32_le(zip_bytes, pos + 42).ok_or("Invalid ZIP local offset.")? as usize;
+        let extra_len =
+            read_u16_le(zip_bytes, pos + 30).ok_or("Invalid ZIP extra length.")? as usize;
+        let comment_len =
+            read_u16_le(zip_bytes, pos + 32).ok_or("Invalid ZIP comment length.")? as usize;
+        let local_off =
+            read_u32_le(zip_bytes, pos + 42).ok_or("Invalid ZIP local offset.")? as usize;
 
         let name_bytes = zip_bytes
             .get(pos + 46..pos + 46 + name_len)
@@ -354,14 +361,18 @@ pub fn parse_crx_or_zip(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, Strin
         }
         let rel = normalize_rel_path(raw_name)?;
         if files.len() >= MAX_EXTENSION_FILES {
-            return Err(format!("Extension exceeds maximum of {MAX_EXTENSION_FILES} files."));
+            return Err(format!(
+                "Extension exceeds maximum of {MAX_EXTENSION_FILES} files."
+            ));
         }
 
         if zip_bytes.get(local_off..local_off + 4) != Some(b"PK\x03\x04") {
             return Err("Corrupt ZIP local file header.".into());
         }
-        let l_name_len = read_u16_le(zip_bytes, local_off + 26).ok_or("Invalid local header.")? as usize;
-        let l_extra_len = read_u16_le(zip_bytes, local_off + 28).ok_or("Invalid local header.")? as usize;
+        let l_name_len =
+            read_u16_le(zip_bytes, local_off + 26).ok_or("Invalid local header.")? as usize;
+        let l_extra_len =
+            read_u16_le(zip_bytes, local_off + 28).ok_or("Invalid local header.")? as usize;
         let data_start = local_off + 30 + l_name_len + l_extra_len;
         let comp_slice = zip_bytes
             .get(data_start..data_start + comp_size)
@@ -386,7 +397,11 @@ pub fn parse_crx_or_zip(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, Strin
                 }
                 out
             }
-            other => return Err(format!("Unsupported ZIP compression method {other} for '{rel}'.")),
+            other => {
+                return Err(format!(
+                    "Unsupported ZIP compression method {other} for '{rel}'."
+                ));
+            }
         };
         total_bytes = total_bytes.saturating_add(data.len() as u64);
         files.insert(rel, data);
@@ -448,12 +463,7 @@ pub async fn review_extension_input(
         }
         let bytes = fs::read(path).map_err(|e| format!("Failed reading archive: {e}"))?;
         let files = parse_crx_or_zip(&bytes)?;
-        return review_files(
-            files,
-            path.to_string_lossy().into_owned(),
-            workspace,
-            None,
-        );
+        return review_files(files, path.to_string_lossy().into_owned(), workspace, None);
     }
 
     review_unpacked(path, workspace)
@@ -472,7 +482,9 @@ fn review_files(
         .map_err(|e| format!("Invalid manifest.json: {e}"))?;
 
     if manifest.manifest_version != 3 {
-        return Err("Only Chrome Manifest V3 extensions (manifest_version: 3) are supported.".into());
+        return Err(
+            "Only Chrome Manifest V3 extensions (manifest_version: 3) are supported.".into(),
+        );
     }
     manifest.name = manifest.name.trim().to_string();
     manifest.version = manifest.version.trim().to_string();
@@ -523,14 +535,18 @@ fn review_files(
         for js in &mut cs.js {
             let norm = normalize_rel_path(js)?;
             if !files.contains_key(&norm) {
-                return Err(format!("Missing content script '{norm}' referenced by manifest.json."));
+                return Err(format!(
+                    "Missing content script '{norm}' referenced by manifest.json."
+                ));
             }
             *js = norm;
         }
         for css in &mut cs.css {
             let norm = normalize_rel_path(css)?;
             if !files.contains_key(&norm) {
-                return Err(format!("Missing stylesheet '{norm}' referenced by manifest.json."));
+                return Err(format!(
+                    "Missing stylesheet '{norm}' referenced by manifest.json."
+                ));
             }
             *css = norm;
         }
@@ -549,11 +565,17 @@ fn review_files(
         }
     }
 
-    let popup_path = match manifest.action.as_ref().and_then(|a| a.default_popup.as_ref()) {
+    let popup_path = match manifest
+        .action
+        .as_ref()
+        .and_then(|a| a.default_popup.as_ref())
+    {
         Some(p) => {
             let norm = normalize_rel_path(p)?;
             if !files.contains_key(&norm) {
-                return Err(format!("Missing action popup '{norm}' referenced by manifest.json."));
+                return Err(format!(
+                    "Missing action popup '{norm}' referenced by manifest.json."
+                ));
             }
             Some(norm)
         }
@@ -568,7 +590,9 @@ fn review_files(
         Some(p) => {
             let norm = normalize_rel_path(p)?;
             if !files.contains_key(&norm) {
-                return Err(format!("Missing options page '{norm}' referenced by manifest.json."));
+                return Err(format!(
+                    "Missing options page '{norm}' referenced by manifest.json."
+                ));
             }
             Some(norm)
         }
@@ -588,7 +612,13 @@ fn review_files(
         let slug: String = manifest
             .name
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
             .take(24)
             .collect();
         format!("{}-{}", slug.trim_matches('-'), &digest[..12])
@@ -696,11 +726,7 @@ pub fn set_extension_enabled(store: &LocalStore, id: &str, enabled: bool) -> Res
     save_extensions(store, &list)
 }
 
-pub fn remove_extension(
-    store: &LocalStore,
-    profile_dir: &Path,
-    id: &str,
-) -> Result<(), String> {
+pub fn remove_extension(store: &LocalStore, profile_dir: &Path, id: &str) -> Result<(), String> {
     let mut list = list_extensions(store);
     list.retain(|e| e.id != id);
     save_extensions(store, &list)?;
@@ -758,11 +784,7 @@ pub fn matching_content_scripts(
 }
 
 pub fn wrap_extension_script(ext: &InstalledExtension, code: &str) -> String {
-    let prefix = format!(
-        "__harbor_ext:{}:{}:",
-        ext.workspace.as_str(),
-        ext.id
-    );
+    let prefix = format!("__harbor_ext:{}:{}:", ext.workspace.as_str(), ext.id);
     let manifest_json = serde_json::json!({
         "manifest_version": 3,
         "name": ext.name,
@@ -968,7 +990,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        fs::write(pkg.join("content.js"), "document.body.dataset.harborExt='1';").unwrap();
+        fs::write(
+            pkg.join("content.js"),
+            "document.body.dataset.harborExt='1';",
+        )
+        .unwrap();
 
         let store = LocalStore::test_store(&profile.join("local.db")).unwrap();
         let review = review_unpacked(&pkg, SpaceKind::Work).unwrap();
@@ -1089,7 +1115,11 @@ mod tests {
 
         let mut mgr = crate::adblock_engine::AdblockManager::from_rules(&[], vec![]);
         mgr.set_extension_rules(&rules);
-        assert!(mgr.should_block("https://tracker.example.net/a.js", "https://example.com/", "script"));
+        assert!(mgr.should_block(
+            "https://tracker.example.net/a.js",
+            "https://example.com/",
+            "script"
+        ));
 
         let _ = fs::remove_dir_all(&pkg);
         let _ = fs::remove_dir_all(&profile);
@@ -1098,7 +1128,10 @@ mod tests {
     #[test]
     fn parses_crx3_zip_cws_urls_and_reports_compatibility_notes() {
         assert_eq!(
-            extract_cws_id("https://chromewebstore.google.com/detail/example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").as_deref(),
+            extract_cws_id(
+                "https://chromewebstore.google.com/detail/example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            )
+            .as_deref(),
             Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         );
         assert_eq!(
@@ -1114,11 +1147,11 @@ mod tests {
         // Local file header
         zip.extend_from_slice(b"PK\x03\x04");
         zip.extend_from_slice(&20u16.to_le_bytes()); // ver
-        zip.extend_from_slice(&0u16.to_le_bytes());  // flags
-        zip.extend_from_slice(&0u16.to_le_bytes());  // method STORE
-        zip.extend_from_slice(&0u16.to_le_bytes());  // time
-        zip.extend_from_slice(&0u16.to_le_bytes());  // date
-        zip.extend_from_slice(&0u32.to_le_bytes());  // crc
+        zip.extend_from_slice(&0u16.to_le_bytes()); // flags
+        zip.extend_from_slice(&0u16.to_le_bytes()); // method STORE
+        zip.extend_from_slice(&0u16.to_le_bytes()); // time
+        zip.extend_from_slice(&0u16.to_le_bytes()); // date
+        zip.extend_from_slice(&0u32.to_le_bytes()); // crc
         zip.extend_from_slice(&(manifest.len() as u32).to_le_bytes());
         zip.extend_from_slice(&(manifest.len() as u32).to_le_bytes());
         zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -1166,7 +1199,8 @@ mod tests {
         crx.extend_from_slice(&zip);
 
         let files = parse_crx_or_zip(&crx).unwrap();
-        let review = review_files(files, "chrome-web-store:test".into(), SpaceKind::Work, None).unwrap();
+        let review =
+            review_files(files, "chrome-web-store:test".into(), SpaceKind::Work, None).unwrap();
         assert_eq!(review.name, "CRX Ext");
         assert_eq!(review.compatibility_notes.len(), 2);
         assert!(review.compatibility_notes[0].contains("service worker"));

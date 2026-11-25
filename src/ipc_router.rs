@@ -136,7 +136,9 @@ pub fn normalize_address_input(raw: &str, settings: &crate::workspace::HomeSetti
     }
     if !trimmed.contains("://") && !trimmed.contains(char::is_whitespace) {
         if let Ok(url) = reqwest::Url::parse(&format!("https://{trimmed}")) {
-            if url.host_str().is_some_and(|host| host.contains('.') || host == "localhost")
+            if url
+                .host_str()
+                .is_some_and(|host| host.contains('.') || host == "localhost")
                 && url.username().is_empty()
                 && url.password().is_none()
             {
@@ -148,7 +150,10 @@ pub fn normalize_address_input(raw: &str, settings: &crate::workspace::HomeSetti
 }
 
 pub fn saved_bookmarks(runtime: &HarborRuntime) -> Vec<BookmarkPayload> {
-    runtime.store.lock().expect("store lock")
+    runtime
+        .store
+        .lock()
+        .expect("store lock")
         .list_by_type(ItemType::Bookmark)
         .unwrap_or_default()
         .into_iter()
@@ -163,7 +168,11 @@ pub fn build_chrome_snapshot(runtime: &HarborRuntime) -> ChromeStateSnapshot {
     let active = tabs.tab(tabs.focused_tab_id());
     let space = tabs.active_space;
     let shield_on = active.is_none_or(|tab| {
-        !runtime.adblock.lock().expect("adblock lock").is_allowlisted(&tab.url)
+        !runtime
+            .adblock
+            .lock()
+            .expect("adblock lock")
+            .is_allowlisted(&tab.url)
     });
     let tab_count = tabs.space_tabs(space).len();
     let extensions = runtime
@@ -176,7 +185,10 @@ pub fn build_chrome_snapshot(runtime: &HarborRuntime) -> ChromeStateSnapshot {
             ext.popup_path.as_ref().map(|popup| ExtensionAction {
                 id: ext.id.clone(),
                 name: ext.name.clone(),
-                popup_url: format!("harbor://extension-asset/{}/{}/{}", ext.id, ext.version, popup),
+                popup_url: format!(
+                    "harbor://extension-asset/{}/{}/{}",
+                    ext.id, ext.version, popup
+                ),
             })
         })
         .collect();
@@ -186,10 +198,10 @@ pub fn build_chrome_snapshot(runtime: &HarborRuntime) -> ChromeStateSnapshot {
         active_id: tabs.focused_tab_id(),
         tabs: tabs.space_tabs(space).into_iter().cloned().collect(),
         bookmarks,
-        title: active.map(|t| t.title.clone()).unwrap_or_else(|| "No tabs open".into()),
-        url: active
-            .map(|t| t.url.clone())
-            .unwrap_or_default(),
+        title: active
+            .map(|t| t.title.clone())
+            .unwrap_or_else(|| "No tabs open".into()),
+        url: active.map(|t| t.url.clone()).unwrap_or_default(),
         blocked: active.map(|t| t.blocked_on_page).unwrap_or(0),
         shield_on,
         progress: active.map(|t| t.loading_progress).unwrap_or(100),
@@ -221,7 +233,10 @@ pub fn record_history_visit(runtime: &HarborRuntime, url: &str, title: &str) {
     };
     if let Ok(json) = serde_json::to_string(&payload) {
         let store = runtime.store.lock().expect("store lock");
-        if store.upsert_lww(Uuid::new_v4(), ItemType::History, &json, false, true, now).is_ok() {
+        if store
+            .upsert_lww(Uuid::new_v4(), ItemType::History, &json, false, true, now)
+            .is_ok()
+        {
             runtime.sync.changed();
         }
     }
@@ -241,7 +256,8 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
 
     match cmd {
         nav @ (IpcCommand::Navigate { .. } | IpcCommand::NavHome) => {
-            let settings = crate::workspace::home_settings(&runtime.store.lock().expect("store lock"));
+            let settings =
+                crate::workspace::home_settings(&runtime.store.lock().expect("store lock"));
             let url = match nav {
                 IpcCommand::Navigate { input } => normalize_address_input(&input, &settings),
                 _ => settings.home_url,
@@ -264,7 +280,10 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
                 .lock()
                 .expect("tabs lock")
                 .open_tab("harbor://home", "Home");
-            host_action = HostAction::LoadUrl { id: entry.id, url: entry.url };
+            host_action = HostAction::LoadUrl {
+                id: entry.id,
+                url: entry.url,
+            };
         }
         IpcCommand::TabClose { id } => {
             let mut tabs = runtime.tabs.lock().expect("tabs lock");
@@ -273,8 +292,14 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
             if tabs.close_tab(id) {
                 if was_active {
                     host_action = match tabs.active_tab() {
-                        Some(tab) => HostAction::SelectTab { id: tab.id, url: tab.url.clone() },
-                        None => HostAction::LoadUrl { id: NO_TAB, url: EMPTY_WORKSPACE.into() },
+                        Some(tab) => HostAction::SelectTab {
+                            id: tab.id,
+                            url: tab.url.clone(),
+                        },
+                        None => HostAction::LoadUrl {
+                            id: NO_TAB,
+                            url: EMPTY_WORKSPACE.into(),
+                        },
                     };
                 } else if was_split {
                     host_action = HostAction::RefreshSplit;
@@ -290,7 +315,10 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
                 host_action = if visible {
                     HostAction::FocusTab(id)
                 } else {
-                    HostAction::SelectTab { id, url: tab.url.clone() }
+                    HostAction::SelectTab {
+                        id,
+                        url: tab.url.clone(),
+                    }
                 };
             }
         }
@@ -301,12 +329,23 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
                 SpaceKind::Work
             };
             let exts = runtime.extensions.lock().expect("extensions lock").clone();
-            let dnr = crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, kind);
-            runtime.adblock.lock().expect("adblock lock").set_extension_rules(&dnr);
+            let dnr =
+                crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, kind);
+            runtime
+                .adblock
+                .lock()
+                .expect("adblock lock")
+                .set_extension_rules(&dnr);
             let mut tabs = runtime.tabs.lock().expect("tabs lock");
             host_action = match tabs.switch_space(kind) {
-                Some(tab) => HostAction::SelectTab { id: tab.id, url: tab.url.clone() },
-                None => HostAction::LoadUrl { id: NO_TAB, url: EMPTY_WORKSPACE.into() },
+                Some(tab) => HostAction::SelectTab {
+                    id: tab.id,
+                    url: tab.url.clone(),
+                },
+                None => HostAction::LoadUrl {
+                    id: NO_TAB,
+                    url: EMPTY_WORKSPACE.into(),
+                },
             };
         }
         IpcCommand::ToggleSplit => {
@@ -314,7 +353,10 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
             let was_empty = tabs.active_tab_id == NO_TAB;
             tabs.toggle_split_view();
             host_action = match tabs.active_tab().filter(|_| was_empty) {
-                Some(tab) => HostAction::SelectTab { id: tab.id, url: tab.url.clone() },
+                Some(tab) => HostAction::SelectTab {
+                    id: tab.id,
+                    url: tab.url.clone(),
+                },
                 None => HostAction::RefreshSplit,
             };
         }
@@ -334,14 +376,10 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
                 };
                 if let Ok(json) = serde_json::to_string(&payload) {
                     let store = runtime.store.lock().expect("store lock");
-                    if store.upsert_lww(
-                        Uuid::new_v4(),
-                        ItemType::Bookmark,
-                        &json,
-                        false,
-                        true,
-                        now,
-                    ).is_ok() {
+                    if store
+                        .upsert_lww(Uuid::new_v4(), ItemType::Bookmark, &json, false, true, now)
+                        .is_ok()
+                    {
                         runtime.sync.changed();
                     }
                 }
@@ -349,23 +387,36 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
         }
         IpcCommand::AdblockToggleSite => {
             let tabs = runtime.tabs.lock().expect("tabs lock");
-            let url = tabs.tab(tabs.focused_tab_id())
+            let url = tabs
+                .tab(tabs.focused_tab_id())
                 .map(|t| t.url.clone())
                 .unwrap_or_default();
             drop(tabs);
             if let Ok(url) = reqwest::Url::parse(&url) {
-                if let Some(host) = url.host_str().filter(|_| matches!(url.scheme(), "http" | "https")) {
+                if let Some(host) = url
+                    .host_str()
+                    .filter(|_| matches!(url.scheme(), "http" | "https"))
+                {
                     let store = runtime.store.lock().expect("store lock");
-                    let (list_urls, custom_rules, mut allowlisted_domains) = crate::load_saved_adblock_config(&store);
+                    let (list_urls, custom_rules, mut allowlisted_domains) =
+                        crate::load_saved_adblock_config(&store);
                     let enable = !allowlisted_domains.iter().any(|domain| domain == host);
                     if enable {
                         allowlisted_domains.push(host.to_string());
                     } else {
                         allowlisted_domains.retain(|domain| domain != host);
                     }
-                    let config = AdblockConfigPayload { list_urls, custom_rules, allowlisted_domains };
+                    let config = AdblockConfigPayload {
+                        list_urls,
+                        custom_rules,
+                        allowlisted_domains,
+                    };
                     if crate::workspace::store_adblock(&store, &config).is_ok() {
-                        runtime.adblock.lock().expect("adblock lock").set_allowlisted(host, enable);
+                        runtime
+                            .adblock
+                            .lock()
+                            .expect("adblock lock")
+                            .set_allowlisted(host, enable);
                         runtime.sync.changed();
                         runtime.filters_changed.notify_one();
                         host_action = HostAction::Reload;
@@ -391,18 +442,36 @@ mod tests {
     #[test]
     fn toolbar_accepts_window_commands_without_a_payload() {
         let parse = |json| serde_json::from_str::<IpcCommand>(json).unwrap();
-        assert!(matches!(parse(r#"{"type":"win_minimize"}"#), IpcCommand::WinMinimize));
-        assert!(matches!(parse(r#"{"type":"win_maximize"}"#), IpcCommand::WinMaximize));
-        assert!(matches!(parse(r#"{"type":"win_close"}"#), IpcCommand::WinClose));
+        assert!(matches!(
+            parse(r#"{"type":"win_minimize"}"#),
+            IpcCommand::WinMinimize
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"win_maximize"}"#),
+            IpcCommand::WinMaximize
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"win_close"}"#),
+            IpcCommand::WinClose
+        ));
     }
 
     #[test]
     fn address_commands_support_web_and_workspace_navigation() {
         let settings = crate::workspace::HomeSettings::default();
         let normalize_address_input = |raw| super::normalize_address_input(raw, &settings);
-        assert_eq!(normalize_address_input(" example.com "), "https://example.com/");
-        assert_eq!(normalize_address_input("http://localhost:8080"), "http://localhost:8080/");
-        assert_eq!(normalize_address_input("harbor://history"), "harbor://history");
+        assert_eq!(
+            normalize_address_input(" example.com "),
+            "https://example.com/"
+        );
+        assert_eq!(
+            normalize_address_input("http://localhost:8080"),
+            "http://localhost:8080/"
+        );
+        assert_eq!(
+            normalize_address_input("harbor://history"),
+            "harbor://history"
+        );
         assert_eq!(
             normalize_address_input("morning & evening #1"),
             "https://duckduckgo.com/?q=morning+%26+evening+%231"

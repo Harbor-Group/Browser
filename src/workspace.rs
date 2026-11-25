@@ -443,7 +443,9 @@ fn saved_login(
     store: &crate::storage::LocalStore,
     id: Uuid,
 ) -> Result<LoginPayload, Box<dyn std::error::Error + Send + Sync>> {
-    let record = store.record(id, ItemType::Login)?.ok_or("This login no longer exists.")?;
+    let record = store
+        .record(id, ItemType::Login)?
+        .ok_or("This login no longer exists.")?;
     Ok(serde_json::from_str(&record.payload_json)?)
 }
 
@@ -673,7 +675,10 @@ pub async fn handle(
             }
             let review = crate::extensions::review_extension_input(trimmed, workspace).await?;
             let summary = serde_json::to_value(&review)?;
-            let mut queue = runtime.extension_reviews.lock().expect("extension reviews lock");
+            let mut queue = runtime
+                .extension_reviews
+                .lock()
+                .expect("extension reviews lock");
             if queue.len() >= 16 {
                 queue.pop_front();
             }
@@ -698,8 +703,13 @@ pub async fn handle(
                 crate::extensions::list_extensions(&store);
             let space = runtime.tabs.lock().expect("tabs lock").active_space;
             let exts = runtime.extensions.lock().expect("extensions lock").clone();
-            let dnr = crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
-            runtime.adblock.lock().expect("adblock lock").set_extension_rules(&dnr);
+            let dnr =
+                crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
+            runtime
+                .adblock
+                .lock()
+                .expect("adblock lock")
+                .set_extension_rules(&dnr);
             Ok(serde_json::to_value(installed)?)
         }
         WorkspaceCommand::SetExtensionEnabled { id, enabled } if route == "extensions" => {
@@ -709,8 +719,13 @@ pub async fn handle(
                 crate::extensions::list_extensions(&store);
             let space = runtime.tabs.lock().expect("tabs lock").active_space;
             let exts = runtime.extensions.lock().expect("extensions lock").clone();
-            let dnr = crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
-            runtime.adblock.lock().expect("adblock lock").set_extension_rules(&dnr);
+            let dnr =
+                crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
+            runtime
+                .adblock
+                .lock()
+                .expect("adblock lock")
+                .set_extension_rules(&dnr);
             Ok(Value::Null)
         }
         WorkspaceCommand::RemoveExtension { id } if route == "extensions" => {
@@ -720,8 +735,13 @@ pub async fn handle(
                 crate::extensions::list_extensions(&store);
             let space = runtime.tabs.lock().expect("tabs lock").active_space;
             let exts = runtime.extensions.lock().expect("extensions lock").clone();
-            let dnr = crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
-            runtime.adblock.lock().expect("adblock lock").set_extension_rules(&dnr);
+            let dnr =
+                crate::extensions::compile_extension_dnr_rules(&exts, &runtime.profile_dir, space);
+            runtime
+                .adblock
+                .lock()
+                .expect("adblock lock")
+                .set_extension_rules(&dnr);
             Ok(Value::Null)
         }
         WorkspaceCommand::State if route == "settings" => {
@@ -875,9 +895,14 @@ pub async fn handle(
             }
             let store = runtime.store.lock().expect("store lock");
             let existing = id.map(|id| saved_login(&store, id)).transpose()?;
-            let (previous_password, notes) =
-                existing.map(|login| (login.password, login.notes)).unwrap_or_default();
-            let password = if password.is_empty() { previous_password } else { password };
+            let (previous_password, notes) = existing
+                .map(|login| (login.password, login.notes))
+                .unwrap_or_default();
+            let password = if password.is_empty() {
+                previous_password
+            } else {
+                password
+            };
             if password.is_empty() {
                 return Err("Enter a password.".into());
             }

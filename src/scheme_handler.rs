@@ -20,17 +20,28 @@ pub fn resolve_monaco_asset(url: &str) -> Option<(&'static [u8], &'static str)> 
             Some((include_bytes!(concat!("../ui/monaco/", $file)), $mime))
         };
     }
-    let path = url.strip_prefix("harbor://scripts/monaco/")
+    let path = url
+        .strip_prefix("harbor://scripts/monaco/")
         .or_else(|| url.strip_prefix("harbor://install-script/monaco/"))?;
     match path {
         "vs/loader.js" => asset!("vs/loader.js", "text/javascript"),
         "vs/editor/editor.main.js" => asset!("vs/editor/editor.main.js", "text/javascript"),
         "vs/editor/editor.main.css" => asset!("vs/editor/editor.main.css", "text/css"),
-        "vs/basic-languages/javascript/javascript.js" => asset!("vs/basic-languages/javascript/javascript.js", "text/javascript"),
-        "vs/language/typescript/tsMode.js" => asset!("vs/language/typescript/tsMode.js", "text/javascript"),
-        "vs/language/typescript/tsWorker.js" => asset!("vs/language/typescript/tsWorker.js", "text/javascript"),
+        "vs/basic-languages/javascript/javascript.js" => asset!(
+            "vs/basic-languages/javascript/javascript.js",
+            "text/javascript"
+        ),
+        "vs/language/typescript/tsMode.js" => {
+            asset!("vs/language/typescript/tsMode.js", "text/javascript")
+        }
+        "vs/language/typescript/tsWorker.js" => {
+            asset!("vs/language/typescript/tsWorker.js", "text/javascript")
+        }
         "vs/base/worker/workerMain.js" => asset!("vs/base/worker/workerMain.js", "text/javascript"),
-        "vs/base/browser/ui/codicons/codicon/codicon.ttf" => asset!("vs/base/browser/ui/codicons/codicon/codicon.ttf", "font/ttf"),
+        "vs/base/browser/ui/codicons/codicon/codicon.ttf" => asset!(
+            "vs/base/browser/ui/codicons/codicon/codicon.ttf",
+            "font/ttf"
+        ),
         _ => None,
     }
 }
@@ -100,7 +111,9 @@ mod tests {
         assert!(body.contains(".field-action"));
         assert!(body.contains("function renderHomeDashboard"));
         assert!(!body.contains("/* HARBOR_WORKSPACE_CSS */"));
-        assert!(super::resolve_monaco_asset("harbor://install-script/monaco/vs/loader.js").is_some());
+        assert!(
+            super::resolve_monaco_asset("harbor://install-script/monaco/vs/loader.js").is_some()
+        );
         assert!(super::resolve_monaco_asset("harbor://settings/monaco/vs/loader.js").is_none());
     }
 }

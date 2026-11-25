@@ -11,7 +11,7 @@ use crate::adblock_engine::AdblockManager;
 use crate::autofill::AUTOFILL_CONTENT_SCRIPT;
 use crate::scheme_handler::resolve_harbor_url;
 use crate::storage::LocalStore;
-use crate::tab_manager::{TabManager, CHROME_HEIGHT_PX};
+use crate::tab_manager::{CHROME_HEIGHT_PX, TabManager};
 use crate::userscripts::UserScript;
 
 #[derive(Clone)]
@@ -44,7 +44,8 @@ pub struct HarborRuntime {
     pub sync: Arc<crate::sync_worker::SyncService>,
     pub tasks: tokio::runtime::Handle,
     pub script_reviews: Arc<Mutex<std::collections::VecDeque<crate::workspace::ScriptReview>>>,
-    pub extension_reviews: Arc<Mutex<std::collections::VecDeque<crate::extensions::ExtensionReview>>>,
+    pub extension_reviews:
+        Arc<Mutex<std::collections::VecDeque<crate::extensions::ExtensionReview>>>,
     pub profile_dir: std::path::PathBuf,
     pub filters_changed: Arc<tokio::sync::Notify>,
 }
@@ -54,16 +55,13 @@ mod runtime_impl {
     use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use cef::{
-        args::Args,
-        *,
-    };
+    use cef::{args::Args, *};
 
-    use super::{BrowserShellConfig, HarborRuntime, CHROME_HEIGHT_PX};
+    use super::{BrowserShellConfig, CHROME_HEIGHT_PX, HarborRuntime};
     use crate::autofill::AUTOFILL_CONTENT_SCRIPT;
     use crate::ipc_router::{
-        chrome_update_js, dispatch_ipc, record_history_visit, ChromePopover,
-        HostAction, PopoverKind,
+        ChromePopover, HostAction, PopoverKind, chrome_update_js, dispatch_ipc,
+        record_history_visit,
     };
     use crate::reader_mode::READER_MODE_TOGGLE_SCRIPT;
     use crate::scheme_handler::resolve_harbor_url;
@@ -110,7 +108,10 @@ mod runtime_impl {
 
     impl HarborShellState {
         fn tabs_popover_is_open(&self) -> bool {
-            self.popover.lock().unwrap().as_ref()
+            self.popover
+                .lock()
+                .unwrap()
+                .as_ref()
                 .is_some_and(|popover| matches!(popover.kind, PopoverKind::Shelf))
         }
 
@@ -239,7 +240,11 @@ mod runtime_impl {
             }
             for sid in sleep_ids {
                 self.close_tab_view(sid);
-                self.runtime.tabs.lock().unwrap().set_tab_sleeping(sid, true);
+                self.runtime
+                    .tabs
+                    .lock()
+                    .unwrap()
+                    .set_tab_sleeping(sid, true);
             }
             self.sync_tab_views();
             self.update_toolbar(false);
@@ -295,10 +300,14 @@ mod runtime_impl {
             if !active.ready.load(Ordering::Relaxed) {
                 return;
             }
-            let Some(window) = controller.window() else { return };
+            let Some(window) = controller.window() else {
+                return;
+            };
             let size = window.client_area_bounds_in_screen();
             let y = popover.y.clamp(0, size.height.max(0));
-            let height = popover.height.clamp(0, size.height.saturating_sub(y).max(0));
+            let height = popover
+                .height
+                .clamp(0, size.height.saturating_sub(y).max(0));
             let width = popover.width.clamp(0, size.width.max(0));
             if width == 0 || height == 0 {
                 controller.set_visible(0);
@@ -310,7 +319,8 @@ mod runtime_impl {
                 width,
                 height,
             }));
-            if let Some(frame) = controller.contents_view()
+            if let Some(frame) = controller
+                .contents_view()
                 .and_then(|view| view.as_browser_view())
                 .and_then(|view| view.browser())
                 .and_then(|browser| browser.main_frame())
@@ -573,7 +583,9 @@ mod runtime_impl {
         }
     }
 
-    fn workspace_json(result: Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>) -> serde_json::Value {
+    fn workspace_json(
+        result: Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>,
+    ) -> serde_json::Value {
         match result {
             Ok(data) => serde_json::json!({ "data": data }),
             Err(error) => serde_json::json!({ "error": error.to_string() }),
@@ -705,9 +717,24 @@ mod runtime_impl {
         (url.scheme() == "harbor"
             && matches!(url.path(), "" | "/")
             && url.port().is_none()
-            && url.username().is_empty() && url.password().is_none()
-            && matches!(host, "home" | "bookmarks" | "history" | "setup" | "server" | "vault" |
-                "scripts" | "install-script" | "extensions" | "logins" | "adblock" | "settings")).then_some(host)
+            && url.username().is_empty()
+            && url.password().is_none()
+            && matches!(
+                host,
+                "home"
+                    | "bookmarks"
+                    | "history"
+                    | "setup"
+                    | "server"
+                    | "vault"
+                    | "scripts"
+                    | "install-script"
+                    | "extensions"
+                    | "logins"
+                    | "adblock"
+                    | "settings"
+            ))
+        .then_some(host)
     }
 
     #[derive(serde::Deserialize)]
@@ -897,15 +924,13 @@ mod runtime_impl {
     }
 
     fn make_harbor_resource_handler(url: &str) -> ResourceHandler {
-        tracing::debug!(route = url.split('?').next().unwrap_or(url), "serving Harbor page");
+        tracing::debug!(
+            route = url.split('?').next().unwrap_or(url),
+            "serving Harbor page"
+        );
         let (mime, body) = resolve_harbor_url(url)
             .map(|r| (r.mime_type.to_string(), r.render_body()))
-            .unwrap_or_else(|| {
-                (
-                    "text/plain".to_string(),
-                    b"Harbor route not found".to_vec(),
-                )
-            });
+            .unwrap_or_else(|| ("text/plain".to_string(), b"Harbor route not found".to_vec()));
         resource(body, mime)
     }
 
@@ -1101,7 +1126,9 @@ mod runtime_impl {
     }
 
     fn open_script_review(frame: &Frame, raw: &str) -> i32 {
-        let Some(url) = remote_script_url(raw) else { return 0 };
+        let Some(url) = remote_script_url(raw) else {
+            return 0;
+        };
         open_script_review_url(frame, &url)
     }
 
@@ -1171,8 +1198,14 @@ mod runtime_impl {
     }
 
     fn run_user_scripts(runtime: &HarborRuntime, frame: &Frame, url: &str, early: bool) {
-        let scripts = runtime.scripts.lock().expect("scripts lock").iter()
-            .filter(|script| script.matches_url(url) && (script.run_at == RunAt::DocumentStart) == early)
+        let scripts = runtime
+            .scripts
+            .lock()
+            .expect("scripts lock")
+            .iter()
+            .filter(|script| {
+                script.matches_url(url) && (script.run_at == RunAt::DocumentStart) == early
+            })
             .map(|script| script.wrapped_for_injection())
             .collect::<Vec<_>>();
         let workspace = runtime.tabs.lock().expect("tabs lock").active_space;
@@ -1971,11 +2004,8 @@ mod runtime_impl {
 
         let main_args = Args::new();
         let mut app = HarborSubprocessApp::new();
-        let exit_code = execute_process(
-            Some(main_args.as_main_args()),
-            Some(&mut app),
-            sandbox_info,
-        );
+        let exit_code =
+            execute_process(Some(main_args.as_main_args()), Some(&mut app), sandbox_info);
         Some(if exit_code >= 0 { exit_code } else { 1 })
     }
 

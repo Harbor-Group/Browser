@@ -17,8 +17,8 @@ mod workspace;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use adblock_engine::{refresh_remote_lists, AdblockManager};
-use cef_shell::{launch_browser_shell, BrowserShellConfig, HarborRuntime};
+use adblock_engine::{AdblockManager, refresh_remote_lists};
+use cef_shell::{BrowserShellConfig, HarborRuntime, launch_browser_shell};
 use shared_protocol::types::{AdblockConfigPayload, ItemType, UserscriptPayload};
 use storage::LocalStore;
 use sync_worker::SyncService;
@@ -94,11 +94,8 @@ async fn run_browser_app(sandbox_info: *mut u8) -> Result<(), Box<dyn std::error
         });
     let initial_extensions = extensions::list_extensions(&store.lock().expect("store lock"));
     let initial_space = tabs.lock().expect("tabs lock").active_space;
-    let initial_dnr = extensions::compile_extension_dnr_rules(
-        &initial_extensions,
-        &data_dir,
-        initial_space,
-    );
+    let initial_dnr =
+        extensions::compile_extension_dnr_rules(&initial_extensions, &data_dir, initial_space);
     adblock_mgr.set_extension_rules(&initial_dnr);
     let adblock = Arc::new(Mutex::new(adblock_mgr));
     let scripts = Arc::new(Mutex::new(initial_scripts));
@@ -118,8 +115,14 @@ async fn run_browser_app(sandbox_info: *mut u8) -> Result<(), Box<dyn std::error
                 }
                 let (list_urls, custom_rules, allowlisted) =
                     load_saved_adblock_config(&store.lock().expect("store lock"));
-                match refresh_remote_lists(&list_urls, &custom_rules, allowlisted, &cache_path, &store)
-                    .await
+                match refresh_remote_lists(
+                    &list_urls,
+                    &custom_rules,
+                    allowlisted,
+                    &cache_path,
+                    &store,
+                )
+                .await
                 {
                     Ok(manager) => {
                         adblock.lock().expect("adblock lock").replace_rules(manager);
@@ -168,7 +171,9 @@ fn start_browser(sandbox_info: *mut u8) -> Result<(), Box<dyn std::error::Error>
 
 pub fn run_from_executable() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(all(windows, feature = "cef-runtime")) {
-        return Err("Launch output\\harbor.exe to start Harbor with the Windows CEF sandbox".into());
+        return Err(
+            "Launch output\\harbor.exe to start Harbor with the Windows CEF sandbox".into(),
+        );
     }
     if let Some(code) = cef_shell::early_sub_process_check(std::ptr::null_mut()) {
         std::process::exit(code);

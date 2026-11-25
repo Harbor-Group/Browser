@@ -274,7 +274,10 @@ fn regex_here(p: &[char], pi: usize, t: &[char], ti: usize, ci: bool) -> bool {
     let atom = &p[pi..pi + atom_len];
     let mut matched_positions = vec![ti];
     let mut cur = ti;
-    while matched_positions.len() - 1 < max_rep && cur < t.len() && atom_matches(atom, neg_class, t[cur], ci) {
+    while matched_positions.len() - 1 < max_rep
+        && cur < t.len()
+        && atom_matches(atom, neg_class, t[cur], ci)
+    {
         cur += 1;
         matched_positions.push(cur);
     }
@@ -309,7 +312,17 @@ fn match_group_reps(
         for end_ti in ti..=t.len() {
             if branch_matches_exact(branch, t, ti, end_ti, ci)
                 && (end_ti > ti || depth + 1 >= min_rep)
-                && match_group_reps(branches, p, next_pi, t, end_ti, min_rep, max_rep, ci, depth + 1)
+                && match_group_reps(
+                    branches,
+                    p,
+                    next_pi,
+                    t,
+                    end_ti,
+                    min_rep,
+                    max_rep,
+                    ci,
+                    depth + 1,
+                )
             {
                 return true;
             }
