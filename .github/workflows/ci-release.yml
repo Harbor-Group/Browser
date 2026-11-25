@@ -1,0 +1,103 @@
+name: Harbor Browser CI & Release
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  quality:
+    name: Format, Clippy & Unit Tests
+    runs-on: windows-latest
+    steps:
+      - name: Generate Harbor Bot token
+        uses: actions/create-github-app-token@v1
+        id: harbor-bot
+        with:
+          app-id: ${{ secrets.HARBOR_BOT_APP_ID }}
+          private-key: ${{ secrets.HARBOR_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ steps.harbor-bot.outputs.token }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --lib -- -D warnings
+      - run: cargo test --lib --locked
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Harbor Bot token
+        uses: actions/create-github-app-token@v1
+        id: harbor-bot
+        with:
+          app-id: ${{ secrets.HARBOR_BOT_APP_ID }}
+          private-key: ${{ secrets.HARBOR_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ steps.harbor-bot.outputs.token }}
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-release:
+    name: Build Windows Bundle & Release
+    needs: [quality, security]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate Harbor Bot token
+        uses: actions/create-github-app-token@v1
+        id: harbor-bot
+        with:
+          app-id: ${{ secrets.HARBOR_BOT_APP_ID }}
+          private-key: ${{ secrets.HARBOR_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ steps.harbor-bot.outputs.token }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --locked --release
+
+      - name: Package Windows artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-pkg | Out-Null
+          Copy-Item target/release/harbor.exe release-pkg/
+          if (Test-Path target/release/harbor.dll) { Copy-Item target/release/harbor.dll release-pkg/ }
+          Compress-Archive -Path release-pkg/* -DestinationPath harbor-browser-windows-x86_64.zip -Force
+          $hash = (Get-FileHash harbor-browser-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  harbor-browser-windows-x86_64.zip" | Out-File -Encoding ascii harbor-browser-windows-x86_64.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harbor-browser-windows-x86_64
+          path: |
+            harbor-browser-windows-x86_64.zip
+            harbor-browser-windows-x86_64.zip.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            harbor-browser-windows-x86_64.zip
+            harbor-browser-windows-x86_64.zip.sha256

@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harbor Chrome</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bar:#202731;
+  --surface:#222933;
+  --input:#1c222b;
+  --hover:#2c3542;
+  --line:#334155;
+  --line-soft:rgba(148,163,184,.18);
+  --text:#e5e7eb;
+  --muted:#94a3b8;
+  --work:#38bdf8;
+  --personal:#34d399;
+  --danger:#f43f5e;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;padding:0;
+  background:transparent;
+  color:var(--text);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:12px;
+  user-select:none;
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:transparent}
+svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+.header{
+  height:48px;
+  padding:0 10px;
+  background:var(--bar);
+  border-bottom:1px solid var(--line-soft);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  position:relative;
+  -webkit-app-region:drag;
+}
+/* The native caption consumes pointer events until the Tabs popup is dismissed. */
+:root.shelf-open #header{-webkit-app-region:no-drag}
+.cluster{display:flex;align-items:center;gap:4px;flex:none;-webkit-app-region:no-drag}
+.iconbtn{
+  width:28px;height:28px;
+  border-radius:7px;
+  display:grid;place-items:center;
+  color:#cbd5e1;
+  transition:background .12s,color .12s;
+}
+.iconbtn:hover{background:var(--hover);color:#fff}
+.iconbtn:disabled{opacity:.35;pointer-events:none}
+.iconbtn[hidden]{display:none}
+.iconbtn.active{background:rgba(56,189,248,.16);color:#bae6fd}
+.iconbtn.close:hover{background:rgba(244,63,94,.2);color:#fda4af}
+
+.tabs-pill{
+  height:28px;
+  padding:0 8px;
+  border-radius:7px;
+  background:#27313f;
+  border:1px solid var(--line-soft);
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-weight:500;
+  color:#f1f5f9;
+  transition:background .12s,border-color .12s;
+}
+.tabs-pill:hover{background:#313d4f}
+.tabs-pill.open{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.4)}
+.tabs-pill .space-dot{display:inline-flex;color:var(--work)}
+.tabs-pill[data-space="Personal"] .space-dot{color:var(--personal)}
+.tabs-pill .space-name{color:var(--muted);font-weight:400}
+@media(max-width:760px){.tabs-pill .space-name{display:none}}
+
+.newtab-btn{
+  width:28px;height:28px;
+  border-radius:7px;
+  background:rgba(39,49,63,.7);
+  border:1px solid var(--line-soft);
+  display:grid;place-items:center;
+  color:#cbd5e1;
+}
+.newtab-btn:hover{background:#313d4f;color:#fff}
+
+.center{flex:1;min-width:0;display:flex;justify-content:center;padding:0 4px}
+.addr-shell{
+  -webkit-app-region:no-drag;
+  position:relative;
+  width:100%;max-width:560px;
+  height:32px;
+  padding:0 4px 0 10px;
+  border-radius:8px;
+  background:var(--input);
+  border:1px solid rgba(148,163,184,.22);
+  display:flex;align-items:center;gap:6px;
+  transition:border-color .12s,background .12s;
+}
+.addr-shell:hover{border-color:rgba(148,163,184,.38)}
+.addr-shell.open{
+  background:var(--surface);
+  border-color:rgba(148,163,184,.48);
+  border-bottom-left-radius:0;
+  border-bottom-right-radius:0;
+}
+.addr-display{
+  flex:1;min-width:0;height:100%;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  text-align:left;
+}
+.addr-left{display:flex;align-items:center;gap:7px;min-width:0}
+.lock-icon{color:#34d399;width:13px;height:13px}
+.tab-title{font-weight:500;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.domain-hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:860px){.domain-hint{display:none}}
+.kbd-hint{font-family:ui-monospace,Consolas,monospace;font-size:10px;color:var(--muted);flex:none}
+.cmd-wrap{flex:1;min-width:0;height:100%;display:none;align-items:center;gap:7px}
+.addr-shell.open .addr-display{display:none}
+.addr-shell.open .cmd-wrap{display:flex}
+.cmd-input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:#f8fafc}
+.esc-pill{padding:2px 6px;border-radius:4px;background:#334155;color:#cbd5e1;font-family:ui-monospace,Consolas,monospace;font-size:10px}
+
+.win-divider{width:1px;height:16px;background:var(--line-soft);margin:0 4px}
+.progress{position:absolute;left:0;bottom:0;height:2px;width:0%;background:var(--work);opacity:0;transition:width .18s ease,opacity .2s ease}
+.progress.loading{opacity:1}
+
+.popover{
+  display:none;
+  position:fixed;
+  top:54px;
+  background:rgba(32,39,49,.98);
+  border:1px solid rgba(148,163,184,.25);
+  border-radius:12px;
+  box-shadow:0 20px 45px rgba(0,0,0,.55);
+  z-index:40;
+  overflow:hidden;
+}
+.popover.open{display:block}
+.pop-head{
+  padding:9px 11px;
+  background:#1c222b;
+  border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.pop-body{padding:8px;max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.pop-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 9px;border-radius:8px;color:#e2e8f0;text-align:left;width:100%;
+}
+.pop-row:hover{background:var(--hover);color:#fff}
+.pop-row.active{background:rgba(56,189,248,.16);color:#fff}
+.pop-sub{display:block;font-size:10px;color:var(--muted)}
+.space-pills{display:flex;gap:4px}
+.space-pill{padding:4px 9px;border-radius:6px;font-weight:500;color:var(--muted)}
+.space-pill.work.active{background:rgba(56,189,248,.18);color:#7dd3fc}
+.space-pill.personal.active{background:rgba(52,211,153,.18);color:#6ee7b7}
+.mini-btn{padding:4px 8px;border-radius:6px;background:#27313f;color:#e2e8f0;font-size:11px;border:1px solid var(--line-soft)}
+.mini-btn:hover{background:#334155}
+.tab-close{width:25px;height:25px;display:grid;place-items:center;flex:none;padding:0}
+.tab-close svg{width:12px;height:12px}
+
+.shelf-pop{left:10px;width:330px}
+.bm-pop{right:54px;width:310px}
+.ext-pop{right:86px;width:340px}
+.menu-pop{right:10px;width:292px}
+
+.cmd-dropdown{
+  display:none;
+  position:absolute;
+  left:-1px;right:-1px;top:100%;
+  background:rgba(34,41,51,.98);
+  border:1px solid rgba(148,163,184,.48);
+  border-top:0;
+  border-bottom-left-radius:10px;
+  border-bottom-right-radius:10px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);
+  padding:6px;
+  max-height:280px;
+  overflow-y:auto;
+  z-index:50;
+}
+.addr-shell.open .cmd-dropdown{display:block}
+.cmd-item{
+  width:100%;padding:7px 9px;border-radius:8px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  text-align:left;color:#e2e8f0;
+}
+.cmd-item:hover,.cmd-item.first{background:rgba(56,189,248,.14);color:#fff}
+.badge{padding:2px 7px;border-radius:999px;background:#1c222b;color:var(--muted);font-size:10px;font-family:ui-monospace,Consolas,monospace}
+
+.sync-status{display:flex;align-items:center;gap:8px;min-width:0}
+.sync-dot{width:8px;height:8px;border-radius:999px;background:#34d399;flex:none}
+.sync-title{font-weight:600;color:#f1f5f9;display:block}
+.menu-body{padding:10px;display:flex;flex-direction:column;gap:10px}
+.shield-row{
+  padding:8px 10px;border-radius:9px;
+  background:#1c222b;border:1px solid var(--line-soft);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.switch{width:30px;height:16px;border-radius:999px;padding:2px;background:#475569;display:flex;align-items:center;transition:background .15s}
+.switch.on{background:#38bdf8;justify-content:flex-end}
+.switch span{width:12px;height:12px;border-radius:999px;background:#fff}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.menu-tile{
+  padding:8px 9px;border-radius:8px;
+  background:#1c222b;border:1px solid var(--line-soft);
+  display:flex;align-items:center;gap:7px;
+  color:#e2e8f0;text-align:left;
+}
+.menu-tile:hover{background:#27313f;color:#fff}
+.menu-links{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line-soft);padding-top:8px}
+.menu-link{
+  width:100%;padding:7px 9px;border-radius:7px;
+  display:flex;align-items:center;justify-content:space-between;
+  color:#cbd5e1;text-align:left;
+}
+.menu-link:hover{background:var(--hover);color:#fff}
+/* The toolbar measures each popup. The CEF overlay paints the same panel
+   inside its own window bounds, leaving the website viewport at 48px. */
+:root:not(.overlay) :is(.popover, .cmd-dropdown){visibility:hidden;pointer-events:none}
+.overlay, .overlay body{overflow:hidden;background:var(--surface)}
+.overlay #header{visibility:hidden;-webkit-app-region:no-drag}
+.overlay :is(.popover, .cmd-dropdown){
+  position:fixed;
+  inset:0;
+  width:auto;
+  max-height:none;
+  visibility:visible;
+  overflow:auto;
+  box-shadow:none;
+}
+.overlay .pop-body{max-height:none}
+</style>
+</head>
+<body>
+<header class="header" id="header">
+  <div class="cluster">
+    <button class="iconbtn" data-nav="back" title="Back" aria-label="Back" disabled>
+      <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <button class="iconbtn" data-nav="forward" title="Forward" aria-label="Forward" disabled>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <button class="iconbtn" data-nav="home" title="Home" aria-label="Home" hidden>
+      <svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg>
+    </button>
+
+    <button class="tabs-pill" id="tabs-btn" data-space="Personal" title="Personal space: 1 tab">
+      <span class="space-dot">
+        <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </span>
+      <span id="tabs-count">1</span>
+      <span class="space-name" id="tabs-space">Personal</span>
+    </button>
+
+    <button class="newtab-btn" id="new-tab-btn" title="New tab (Ctrl+T)" aria-label="New tab">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+
+  <div class="center">
+    <div class="addr-shell" id="addr-shell">
+      <button class="addr-display" id="addr-display" title="Click or press Ctrl+K to search or enter URL">
+        <span class="addr-left">
+          <svg class="lock-icon" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <span class="tab-title" id="tab-title">Home</span>
+          <span class="domain-hint" id="domain-hint">harbor://home</span>
+        </span>
+        <span class="kbd-hint">Ctrl+K</span>
+      </button>
+
+      <div class="cmd-wrap">
+        <svg viewBox="0 0 24 24" style="color:#38bdf8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="cmd-input" class="cmd-input" type="text" placeholder="Type a URL, tab, bookmark, or command...">
+        <button class="esc-pill" id="cmd-close">Esc</button>
+      </div>
+
+      <button class="iconbtn" data-nav="reload" title="Reload (Ctrl+R)" aria-label="Reload">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+      </button>
+
+      <div class="cmd-dropdown" id="cmd-dropdown"></div>
+    </div>
+  </div>
+
+  <div class="cluster">
+    <button class="iconbtn" id="extensions-btn" title="Extensions" aria-label="Extensions">
+      <svg viewBox="0 0 24 24"><path d="M14 6a2 2 0 1 0-4 0H5v5a2 2 0 1 1 0 4v5h5a2 2 0 1 1 4 0h5v-5a2 2 0 1 0 0-4V6z"/></svg>
+    </button>
+    <button class="iconbtn" id="bookmarks-btn" title="Bookmarks" aria-label="Bookmarks">
+      <svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4z"/></svg>
+    </button>
+    <button class="iconbtn" id="menu-btn" title="Harbor menu" aria-label="Harbor menu">
+      <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    </button>
+    <div class="win-divider"></div>
+    <button class="iconbtn" data-win="minimize" title="Minimize" aria-label="Minimize">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+    </button>
+    <button class="iconbtn" data-win="maximize" title="Maximize or restore" aria-label="Maximize">
+      <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+    </button>
+    <button class="iconbtn close" data-win="close" title="Close" aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="progress" id="progress"></div>
+</header>
+
+<!-- Left-Anchored Tabs & Spaces Shelf Popover -->
+<div class="popover shelf-pop" id="shelf-popover">
+  <div class="pop-head">
+    <div class="space-pills">
+      <button class="space-pill personal active" id="space-personal">Personal</button>
+      <button class="space-pill work" id="space-work">Work</button>
+    </div>
+    <button class="mini-btn" id="shelf-newtab">+ New Tab</button>
+  </div>
+  <div class="pop-body" id="shelf-body"></div>
+</div>
+
+<!-- Right-Anchored Bookmarks Popover -->
+<div class="popover bm-pop" id="bm-popover">
+  <div class="pop-head">
+    <strong style="font-size:12px">Bookmarks</strong>
+    <button class="mini-btn" id="bm-save-current">Save Page</button>
+  </div>
+  <div class="pop-body" id="bm-body"></div>
+</div>
+
+<!-- Right-Anchored Extensions Popover -->
+<div class="popover ext-pop" id="ext-popover">
+  <div class="pop-head">
+    <strong style="font-size:12px" id="ext-pop-title">Extensions</strong>
+    <div style="display:flex;gap:4px">
+      <button class="mini-btn" id="ext-pop-back" hidden>Back</button>
+      <button class="mini-btn" data-route="harbor://extensions">Manage</button>
+    </div>
+  </div>
+  <div class="pop-body" id="ext-body"></div>
+</div>
+
+<!-- Right-Anchored Redesigned Harbor Menu Popover -->
+<div class="popover menu-pop" id="menu-popover">
+  <div class="pop-head">
+    <div class="sync-status">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span>
+        <span class="sync-title" id="sync-label">Home Server</span>
+        <span class="pop-sub" id="sync-sub">Encrypted workspace sync</span>
+      </span>
+    </div>
+    <button class="mini-btn" data-route="harbor://server">Manage</button>
+  </div>
+
+  <div class="menu-body">
+    <button class="shield-row" id="shield-toggle">
+      <span style="display:flex;align-items:center;gap:8px">
+        <svg viewBox="0 0 24 24" style="color:#38bdf8"><path d="m12 2 8 4v6c0 5-3 8-8 10-5-2-8-5-8-10V6z"/></svg>
+        <span style="text-align:left">
+          <span style="display:block;font-weight:500">Ad &amp; Tracker Shield</span>
+          <span class="pop-sub"><span id="shield-count">0</span> blocked on this site</span>
+        </span>
+      </span>
+      <span class="switch on" id="shield-switch"><span></span></span>
+    </button>
+
+    <div class="menu-grid">
+      <button class="menu-tile" data-ipc="toggle_reader">
+        <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        <span>Reader</span>
+      </button>
+      <button class="menu-tile" data-ipc="toggle_split" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+        <span id="split-label">Split View</span>
+      </button>
+      <button class="menu-tile" data-route="harbor://scripts">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>User Scripts</span>
+      </button>
+      <button class="menu-tile" data-route="harbor://logins">
+        <svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+        <span>Logins</span>
+      </button>
+    </div>
+
+    <div class="menu-links">
+      <button class="menu-link" data-ipc="toggle_dev_tools">
+        <span>Developer Tools</span><span class="pop-sub">F12</span>
+      </button>
+      <button class="menu-link" data-route="harbor://extensions">
+        <span>Extensions</span><span class="pop-sub">›</span>
+      </button>
+      <button class="menu-link" data-route="harbor://adblock">
+        <span>Custom Filter Lists</span><span class="pop-sub">›</span>
+      </button>
+      <button class="menu-link" data-route="harbor://history">
+        <span>History</span><span class="pop-sub">›</span>
+      </button>
+      <button class="menu-link" data-route="harbor://server">
+        <span>Home Server &amp; Devices</span><span class="pop-sub">›</span>
+      </button>
+      <button class="menu-link" data-route="harbor://settings">
+        <span>Settings</span><span class="pop-sub">›</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const isPopover = location.pathname === '/popover';
+document.documentElement.classList.toggle('overlay', isPopover);
+let pendingCommand = Promise.resolve();
+const ipc = window.__harborChromeIPC || {
+  send(type, payload) {
+    const data = encodeURIComponent(JSON.stringify({ type, payload }));
+    pendingCommand = pendingCommand
+      .then(() => fetch('/action?data=' + data, {
+        method: 'POST',
+        headers: { 'X-Harbor-Chrome': '1' },
+        mode: 'same-origin'
+      }))
+      .then(response => {
+        if (!response.ok) throw new Error('Harbor command returned ' + response.status);
+        return response.json();
+      })
+      .then(window.__harborUpdateChrome)
+      .catch(error => console.error('Harbor command failed', error));
+  }
+};
+
+const state = {
+  space: 'Personal',
+  tabCount: 1,
+  activeId: 1,
+  title: 'Home',
+  url: 'harbor://home',
+  shieldOn: true,
+  blocked: 0,
+  tabs: [{ id: 1, space: 'Personal', title: 'Home', url: 'harbor://home' }],
+  bookmarks: [],
+  extensions: [],
+  openPopover: null // null | 'command' | 'shelf' | 'bookmarks' | 'extensions' | 'menu'
+};
+
+const addrShell = document.getElementById('addr-shell');
+const cmdInput = document.getElementById('cmd-input');
+const cmdDropdown = document.getElementById('cmd-dropdown');
+const shelfPop = document.getElementById('shelf-popover');
+const bmPop = document.getElementById('bm-popover');
+const extPop = document.getElementById('ext-popover');
+const menuPop = document.getElementById('menu-popover');
+const tabsBtn = document.getElementById('tabs-btn');
+const bmBtn = document.getElementById('bookmarks-btn');
+const extBtn = document.getElementById('extensions-btn');
+const menuBtn = document.getElementById('menu-btn');
+const popovers = { command: cmdDropdown, shelf: shelfPop, bookmarks: bmPop, extensions: extPop, menu: menuPop };
+
+function displayPopover(name) {
+  state.openPopover = name;
+  if (!isPopover) document.documentElement.classList.toggle('shelf-open', name === 'shelf');
+  addrShell.classList.toggle('open', state.openPopover === 'command');
+  shelfPop.classList.toggle('open', state.openPopover === 'shelf');
+  bmPop.classList.toggle('open', state.openPopover === 'bookmarks');
+  extPop.classList.toggle('open', state.openPopover === 'extensions');
+  menuPop.classList.toggle('open', state.openPopover === 'menu');
+  tabsBtn.classList.toggle('open', state.openPopover === 'shelf');
+  bmBtn.classList.toggle('active', state.openPopover === 'bookmarks');
+  extBtn.classList.toggle('active', state.openPopover === 'extensions');
+  menuBtn.classList.toggle('active', state.openPopover === 'menu');
+}
+
+function publishPopover() {
+  const kind = state.openPopover;
+  if (!kind) {
+    ipc.send('popover_overlay', { popover: null });
+    return;
+  }
+  const bounds = popovers[kind].getBoundingClientRect();
+  const horizontalBounds = kind === 'command' ? addrShell.getBoundingClientRect() : bounds;
+  const x = Math.round(horizontalBounds.left);
+  const y = Math.floor(bounds.top);
+  ipc.send('popover_overlay', { popover: {
+    kind, x, y,
+    width: Math.round(horizontalBounds.right) - x,
+    height: Math.ceil(bounds.bottom) - y,
+    query: kind === 'command' ? cmdInput.value : ''
+  } });
+}
+
+function setPopover(name) {
+  displayPopover(state.openPopover === name ? null : name);
+  if (state.openPopover === 'command') {
+    cmdInput.value = '';
+    renderCommandSuggestions('');
+    cmdInput.focus({ preventScroll: true });
+  } else if (state.openPopover === 'shelf') {
+    renderShelf();
+  } else if (state.openPopover === 'bookmarks') {
+    renderBookmarks();
+  } else if (state.openPopover === 'extensions') {
+    renderExtensions();
+  }
+  publishPopover();
+}
+
+window.__harborClosePopover = () => displayPopover(null);
+window.__harborDismissForPageFocus = () => {
+  if (state.openPopover === 'command' || state.openPopover === 'shelf') setPopover(null);
+};
+window.__harborShowPopover = ({ kind, query }) => {
+  displayPopover(kind);
+  if (kind === 'command') renderCommandSuggestions(query);
+  if (kind === 'shelf') renderShelf();
+  if (kind === 'bookmarks') renderBookmarks();
+  if (kind === 'extensions') renderExtensions();
+};
+
+if (!isPopover) {
+  document.addEventListener('pointerdown', event => {
+    if ((state.openPopover === 'command' && !addrShell.contains(event.target))
+      || (state.openPopover === 'shelf' && !tabsBtn.contains(event.target))) {
+      setPopover(null);
+    }
+  }, { capture: true });
+  window.addEventListener('resize', () => {
+    if (state.openPopover) publishPopover();
+  });
+  const observer = new ResizeObserver(entries => {
+    if (entries.some(entry => entry.target === popovers[state.openPopover])) {
+      publishPopover();
+    }
+  });
+  Object.values(popovers).forEach(popover => observer.observe(popover));
+}
+
+function renderShelf() {
+  document.getElementById('space-work').classList.toggle('active', state.space === 'Work');
+  document.getElementById('space-personal').classList.toggle('active', state.space === 'Personal');
+  const body = document.getElementById('shelf-body');
+  body.innerHTML = '';
+
+  const inSpace = state.tabs.filter(t => t.space === state.space);
+  inSpace.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'pop-row' + (t.id === state.activeId ? ' active' : '');
+    row.innerHTML = `<span style="min-width:0;flex:1;cursor:pointer"><span style="display:block;font-weight:500"></span><span class="pop-sub"></span></span><button class="mini-btn tab-close" title="Close tab" aria-label="Close tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>`;
+    row.querySelector('span > span:first-child').textContent = t.title;
+    row.querySelector('.pop-sub').textContent = t.url;
+    row.querySelector('span').onclick = () => { ipc.send('tab_select', { id: t.id }); setPopover(null); };
+    row.querySelector('button').onclick = (e) => { e.stopPropagation(); ipc.send('tab_close', { id: t.id }); };
+    body.appendChild(row);
+  });
+
+  if (!inSpace.length) {
+    const empty = document.createElement('div');
+    empty.className = 'pop-sub';
+    empty.textContent = 'No open tabs';
+    body.appendChild(empty);
+  }
+}
+
+function renderBookmarks() {
+  const body = document.getElementById('bm-body');
+  body.innerHTML = '';
+  if (!state.bookmarks.length) {
+    body.innerHTML = '<div class="pop-sub" style="padding:10px;text-align:center">No bookmarks saved yet.</div>';
+    return;
+  }
+  state.bookmarks.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'pop-row';
+    btn.innerHTML = `<span><span style="display:block;font-weight:500"></span><span class="pop-sub"></span></span>`;
+    btn.querySelector('span > span:first-child').textContent = b.title;
+    btn.querySelector('.pop-sub').textContent = b.url;
+    btn.onclick = () => { ipc.send('navigate', { input: b.url }); setPopover(null); };
+    body.appendChild(btn);
+  });
+}
+
+function renderExtensions() {
+  const titleEl = document.getElementById('ext-pop-title');
+  const backBtn = document.getElementById('ext-pop-back');
+  const body = document.getElementById('ext-body');
+  titleEl.textContent = 'Extensions';
+  backBtn.hidden = true;
+  body.innerHTML = '';
+  const list = state.extensions || [];
+  if (!list.length) {
+    body.innerHTML = '<div class="pop-sub" style="padding:10px;text-align:center">No active extensions with popups in this workspace.</div>';
+    return;
+  }
+  list.forEach(ext => {
+    const btn = document.createElement('button');
+    btn.className = 'pop-row';
+    btn.innerHTML = `<span><span style="display:block;font-weight:500"></span><span class="pop-sub">Open action popup</span></span><span class="pop-sub">›</span>`;
+    btn.querySelector('span > span:first-child').textContent = ext.name;
+    btn.onclick = () => {
+      titleEl.textContent = ext.name;
+      backBtn.hidden = false;
+      body.innerHTML = '';
+      const frame = document.createElement('iframe');
+      frame.src = ext.popupUrl;
+      frame.setAttribute('sandbox', 'allow-scripts allow-forms');
+      frame.style.cssText = 'width:100%;height:300px;border:0;border-radius:8px;background:#fff';
+      body.appendChild(frame);
+      publishPopover();
+    };
+    body.appendChild(btn);
+  });
+  backBtn.onclick = () => { renderExtensions(); publishPopover(); };
+}
+
+function renderCommandSuggestions(q) {
+  const query = q.trim();
+  const rows = [
+    { label: query ? `Navigate to "${query}"` : 'Go to harbor://home', sub: 'Open in active tab', badge: 'Enter', action: () => ipc.send('navigate', { input: query || 'harbor://home' }) },
+    { label: 'Custom Filter Lists', sub: 'harbor://adblock', badge: 'Adblock', action: () => ipc.send('navigate', { input: 'harbor://adblock' }) },
+    { label: 'JavaScript User Scripts', sub: 'harbor://scripts', badge: 'Scripts', action: () => ipc.send('navigate', { input: 'harbor://scripts' }) },
+    { label: 'Home Sync Server', sub: 'harbor://server', badge: 'Vault', action: () => ipc.send('navigate', { input: 'harbor://server' }) }
+  ];
+  cmdDropdown.innerHTML = '';
+  rows.forEach((r, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'cmd-item' + (idx === 0 ? ' first' : '');
+    btn.innerHTML = `<span><span style="display:block;font-weight:500"></span><span class="pop-sub"></span></span><span class="badge"></span>`;
+    btn.querySelector('span > span:first-child').textContent = r.label;
+    btn.querySelector('.pop-sub').textContent = r.sub;
+    btn.querySelector('.badge').textContent = r.badge;
+    btn.onclick = () => { r.action(); setPopover(null); };
+    cmdDropdown.appendChild(btn);
+  });
+}
+
+document.getElementById('addr-display').addEventListener('click', () => setPopover('command'));
+document.getElementById('cmd-close').addEventListener('click', (e) => { e.stopPropagation(); setPopover(null); });
+cmdInput.addEventListener('input', () => {
+  renderCommandSuggestions(cmdInput.value);
+  publishPopover();
+});
+cmdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    ipc.send('navigate', { input: cmdInput.value.trim() || state.url });
+    setPopover(null);
+  }
+});
+
+tabsBtn.addEventListener('click', () => setPopover('shelf'));
+document.getElementById('space-work').addEventListener('click', () => { state.space = 'Work'; ipc.send('switch_space', { space: 'Work' }); renderShelf(); });
+document.getElementById('space-personal').addEventListener('click', () => { state.space = 'Personal'; ipc.send('switch_space', { space: 'Personal' }); renderShelf(); });
+document.getElementById('shelf-newtab').addEventListener('click', () => { ipc.send('tab_new'); setPopover(null); });
+document.getElementById('new-tab-btn').addEventListener('click', () => ipc.send('tab_new'));
+
+bmBtn.addEventListener('click', () => setPopover('bookmarks'));
+extBtn.addEventListener('click', () => setPopover('extensions'));
+document.getElementById('bm-save-current').addEventListener('click', () => { ipc.send('bookmark_toggle'); setPopover(null); });
+menuBtn.addEventListener('click', () => setPopover('menu'));
+
+document.getElementById('shield-toggle').addEventListener('click', () => {
+  state.shieldOn = !state.shieldOn;
+  document.getElementById('shield-switch').classList.toggle('on', state.shieldOn);
+  ipc.send('adblock_toggle_site');
+});
+
+document.querySelectorAll('[data-nav]').forEach(el =>
+  el.addEventListener('click', () => ipc.send('nav_' + el.dataset.nav))
+);
+document.querySelectorAll('[data-win]').forEach(el =>
+  el.addEventListener('click', () => ipc.send('win_' + el.dataset.win))
+);
+document.querySelectorAll('[data-ipc]').forEach(el =>
+  el.addEventListener('click', () => { ipc.send(el.dataset.ipc); setPopover(null); })
+);
+document.querySelectorAll('[data-route]').forEach(el =>
+  el.addEventListener('click', () => { ipc.send('navigate', { input: el.dataset.route }); setPopover(null); })
+);
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && ['k', 'l'].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    if (!isPopover) window.__harborShortcut('command');
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
+    e.preventDefault();
+    ipc.send('tab_new');
+  } else if (e.key === 'Escape' && state.openPopover) {
+    setPopover(null);
+  }
+});
+
+window.__harborShortcut = function(command) {
+  if (command === 'command') {
+    if (state.openPopover === 'command') {
+      cmdInput.focus({ preventScroll: true });
+    } else {
+      setPopover('command');
+    }
+  } else {
+    ipc.send(command);
+  }
+};
+
+window.__harborUpdateChrome = function(patch) {
+  Object.assign(state, patch);
+  document.getElementById('tabs-count').textContent = String(state.tabCount);
+  document.getElementById('tabs-space').textContent = state.space;
+  tabsBtn.dataset.space = state.space;
+  tabsBtn.title = `${state.space} space: ${state.tabCount} ${state.tabCount === 1 ? 'tab' : 'tabs'}`;
+  document.getElementById('tab-title').textContent = state.title;
+  document.getElementById('domain-hint').textContent = state.url;
+  document.getElementById('shield-count').textContent = String(state.blocked);
+  document.getElementById('shield-switch').classList.toggle('on', Boolean(state.shieldOn));
+  document.querySelector('[data-nav="back"]').disabled = !state.canGoBack;
+  document.querySelector('[data-nav="forward"]').disabled = !state.canGoForward;
+  document.querySelector('[data-nav="home"]').hidden = !state.showHomeButton;
+  document.querySelector('[data-ipc="toggle_split"]').setAttribute('aria-pressed', String(Boolean(state.split)));
+  document.getElementById('split-label').textContent = state.split ? 'Close Split View' : 'Split View';
+  if (state.openPopover === 'shelf') renderShelf();
+  if (state.openPopover === 'bookmarks') renderBookmarks();
+  if (typeof patch.progress === 'number') {
+    const prog = document.getElementById('progress');
+    prog.style.width = patch.progress + '%';
+    prog.classList.toggle('loading', patch.progress > 0 && patch.progress < 100);
+  }
+};
+</script>
+</body>
+</html>

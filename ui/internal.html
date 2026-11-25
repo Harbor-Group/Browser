@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harbor</title>
+<style>/* HARBOR_WORKSPACE_CSS */</style>
+</head>
+<body>
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="side-brand" id="workspace-brand">Harbor</div>
+    <nav class="side-nav" id="workspace-nav" aria-label="Workspace"></nav>
+  </aside>
+  <main class="content" id="view"></main>
+</div>
+<script>/* HARBOR_DASHBOARD */</script>
+<script>
+'use strict';
+const workspaceRequests = new Map();
+window.__harborWorkspaceReply = ({ id, result }) => {
+  const pending = workspaceRequests.get(id);
+  if (!pending) return;
+  workspaceRequests.delete(id);
+  clearTimeout(pending.timer);
+  if (result.error) pending.reject(new Error(result.error));
+  else pending.resolve(result.data);
+};
+
+function callWorkspace(type, payload) {
+  return new Promise((resolve, reject) => {
+    if (typeof window.__harborPostWorkspace !== 'function') {
+      reject(new Error('Harbor’s workspace connection is unavailable. Reload this page and try again.'));
+      return;
+    }
+    const id = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      workspaceRequests.delete(id);
+      reject(new Error('Harbor did not respond. Reload the page and try again.'));
+    }, 90000);
+    workspaceRequests.set(id, { resolve, reject, timer });
+    try {
+      window.__harborPostWorkspace(JSON.stringify({ id, command: { type, payload } }));
+    } catch (error) {
+      clearTimeout(timer);
+      workspaceRequests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+const escapeText = value => String(value).replace(/[&<>"]/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+})[character]);
+
+function currentRoute() {
+  if (location.protocol === 'harbor:') return location.hostname || 'home';
+  return (location.hash || '#home').slice(1);
+}
+
+function setRoute(route) {
+  if (location.protocol === 'harbor:') {
+    location.href = 'harbor://' + route;
+  } else {
+    location.hash = route;
+  }
+}
+
+const navigation = [
+  [['home', 'Home', 'home'], ['bookmarks', 'Bookmarks', 'bookmarks'], ['history', 'History', 'history'], ['logins', 'Logins', 'logins']],
+  [['adblock', 'Adblocker', 'shield'], ['scripts', 'User Scripts', 'scripts'], ['extensions', 'Extensions', 'extensions']],
+  [['server', 'Home Server', 'server'], ['settings', 'Settings', 'settings']]
+];
+document.getElementById('workspace-brand').insertAdjacentHTML('afterbegin', icon('brand'));
+document.getElementById('workspace-nav').innerHTML = navigation.map(group =>
+  `<div class="side-group">${group.map(([route, label, glyph]) =>
+    `<button type="button" class="sidebtn" data-route="${route}">${icon(glyph)}<span>${label}</span></button>`
+  ).join('')}</div>`
+).join('');
+document.querySelectorAll('[data-route]').forEach(btn =>
+  btn.addEventListener('click', () => setRoute(btn.dataset.route))
+);
+
+function setStatus(status, message, error = false) {
+  status.textContent = message;
+  status.toggleAttribute('data-error', error);
+}
+
+function runAction(button, status, action) {
+  return async event => {
+    event?.preventDefault();
+    if (button.disabled) return;
+    button.disabled = true;
+    setStatus(status, 'Working…');
+    try {
+      await action();
+    } catch (error) {
+      setStatus(status, error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+}
+
+async function renderServer(view, setup, message = '') {
+  view.innerHTML = `<header class="page-header"><div><h1>${setup ? 'Set up your Personal workspace' : 'Home Sync Server'}</h1>
+    <p>Connect to your Harbor server to sync bookmarks, history, logins, filters, and scripts across your devices.</p></div></header>
+    <section class="panel" id="server-controls" aria-label="Server connection"><p role="status">Loading server settings…</p></section>
+    <p class="status" id="server-status" role="status"></p>
+    ${setup ? '<button class="btn" id="server-skip">Continue without sync</button>' : ''}`;
+  const controls = view.querySelector('#server-controls');
+  const status = view.querySelector('#server-status');
+  const skip = view.querySelector('#server-skip');
+  if (skip) skip.onclick = runAction(skip, status, async () => {
+    await callWorkspace('skip_setup');
+    setRoute('home');
+  });
+  let server;
+  try {
+    server = await callWorkspace('state');
+  } catch (error) {
+    controls.innerHTML = '<p>Harbor couldn’t load your saved server settings.</p><button class="btn" id="server-retry">Try again</button>';
+    controls.querySelector('#server-retry').onclick = () => renderServer(view, setup);
+    setStatus(status, error.message, true);
+    return;
+  }
+  if (server.unlocked) {
+    controls.innerHTML = `<div class="sync-card"><div><h2>Connected</h2><p class="break">${escapeText(server.server_url)}</p></div>
+      <div class="row wrap compact">
+        <button class="btn primary" id="server-sync">Sync now</button>
+        ${setup ? '<button class="btn" id="server-home">Open workspace</button>' : ''}
+      </div></div>`;
+    const sync = controls.querySelector('#server-sync');
+    const home = controls.querySelector('#server-home');
+    if (home) home.onclick = () => setRoute('home');
+    sync.onclick = runAction(sync, status, async () => {
+      const updated = await callWorkspace('sync_now');
+      const time = new Date(updated.last_sync * 1000).toLocaleTimeString();
+      setStatus(status, 'Synced at ' + time);
+    });
+    setStatus(status, message || server.error || (server.last_sync
+      ? 'Last synced ' + new Date(server.last_sync * 1000).toLocaleString()
+      : 'Your workspace will sync automatically while the vault is unlocked.'), Boolean(server.error));
+    return;
+  }
+  controls.innerHTML = `${server.paired ? '' : `
+    <form class="settings-form server-form" id="server-address">
+      <h2>Server address</h2>
+      <label>Hostname or IP address<input class="input" name="server_url" type="text" placeholder="sync.example.com or 192.168.1.20" autocomplete="off" spellcheck="false" required></label>
+      <span class="subtle">Use the address of the computer running your Harbor sync server. Include the port if it uses one other than 443.</span>
+      <label>TLS certificate fingerprint <span class="subtle">Use the SHA-256 fingerprint from your server administrator if the certificate is privately issued and this device doesn’t trust its CA.</span>
+        <input class="input" name="pin" placeholder="Optional for trusted certificates" autocomplete="off" spellcheck="false"></label>
+      <div class="row"><button class="btn primary" type="submit">Check connection</button></div>
+    </form>`}
+    <form class="settings-form server-form" id="server-form" ${server.paired ? '' : 'hidden'}>
+    ${server.paired ? `<h2>Unlock vault</h2><p class="break">Resume sync with ${escapeText(server.server_url)}.</p>` : `
+      <h2>Pair this device</h2>
+      <p id="verified-server" class="break"></p>
+      <label>Device name<input class="input" name="device_name" value="Harbor on Windows" maxlength="100" required></label>
+      <label>Pairing code<input class="input" name="code" autocomplete="off" spellcheck="false" required></label>
+      <span class="subtle">Run <code>sync-server pair-code</code> on your server, or <code>docker compose exec sync-server sync-server pair-code</code> with Docker. The code is single-use and expires after five minutes.</span>`}
+    <label>Vault passphrase<input class="input" name="passphrase" type="password" autocomplete="off" required></label>
+    ${server.paired ? '' : '<label>Confirm passphrase<input class="input" name="confirmation" type="password" autocomplete="off" required></label>'}
+    <span class="subtle">Use the same passphrase on every paired device. The passphrase stays on this device.</span>
+    <div class="row"><button class="btn primary" type="submit">${server.paired ? 'Unlock vault' : 'Pair and unlock'}</button>
+    ${server.paired ? '' : '<button class="btn" type="button" id="server-back">Back</button>'}</div>
+  </form>`;
+  const form = controls.querySelector('#server-form');
+  const addressForm = controls.querySelector('#server-address');
+  let verifiedAddress;
+  if (addressForm) {
+    addressForm.elements.server_url.value = server.server_url || '';
+    addressForm.onsubmit = runAction(addressForm.querySelector('button'), status, async () => {
+      const address = Object.fromEntries(new FormData(addressForm));
+      const verified = await callWorkspace('check_server', address);
+      verifiedAddress = { ...address, server_url: verified.server_url };
+      controls.querySelector('#verified-server').textContent = 'Server reachable at ' + verifiedAddress.server_url;
+      addressForm.hidden = true;
+      form.hidden = false;
+      form.elements.code.focus();
+      setStatus(status, '');
+    });
+    controls.querySelector('#server-back').onclick = () => {
+      verifiedAddress = undefined;
+      form.hidden = true;
+      addressForm.hidden = false;
+      addressForm.elements.server_url.focus();
+      setStatus(status, '');
+    };
+  }
+  if (message || server.error) setStatus(status, message || server.error, true);
+  form.onsubmit = runAction(form.querySelector('[type="submit"]'), status, async () => {
+    const payload = Object.fromEntries(new FormData(form));
+    if (!server.paired) {
+      if (!verifiedAddress) throw new Error('Check the server connection first.');
+      if (payload.passphrase !== payload.confirmation) throw new Error('The passphrases do not match.');
+      Object.assign(payload, verifiedAddress);
+      delete payload.confirmation;
+      form.elements.confirmation.value = '';
+    }
+    form.elements.passphrase.value = '';
+    try {
+      await callWorkspace(server.paired ? 'unlock' : 'pair', payload);
+    } catch (error) {
+      const refreshed = await callWorkspace('state').catch(() => null);
+      if (refreshed && refreshed.paired !== server.paired) {
+        await renderServer(view, setup, error.message);
+        return;
+      }
+      throw error;
+    }
+    if (setup) setRoute('home');
+    else await renderServer(view, false, 'Vault unlocked. Automatic sync is on.');
+  });
+}
+
+function renderScriptReview(view, signal) {
+  view.innerHTML = `<header class="page-header"><h1>Review user script</h1><button class="btn" id="script-cancel">Cancel</button></header>
+    <p role="status" id="script-status">Fetching the script…</p><div id="script-review"></div>`;
+  const status = view.querySelector('#script-status');
+  const cancel = view.querySelector('#script-cancel');
+  cancel.onclick = () => setRoute('scripts');
+  window.__harborScriptReview = ({ data: review, error }) => {
+    if (signal.aborted) return;
+    const details = view.querySelector('#script-review');
+    if (error) {
+      setStatus(status, error, true);
+      const retry = document.createElement('button');
+      retry.className = 'btn';
+      retry.textContent = 'Try again';
+      retry.onclick = () => location.reload();
+      details.replaceChildren(retry);
+      return;
+    }
+    details.innerHTML = `
+      <div class="panel">
+        <h2>${escapeText(review.script.name)}</h2>
+        <dl class="review-details">
+          <div><dt>Source</dt><dd>${escapeText(review.source_url)}${review.final_url !== review.source_url ? '<br>Downloaded from ' + escapeText(review.final_url) : ''}</dd></div>
+          <div><dt>Version</dt><dd>${escapeText(review.script.version || 'Unspecified')}${review.previous_version ? '<br>Installed version ' + escapeText(review.previous_version) : ''}</dd></div>
+          <div><dt>Runs on</dt><dd>${escapeText(review.script.matches.join(', '))}
+            ${review.script.excludes.length ? '<br>Except ' + escapeText(review.script.excludes.join(', ')) : ''}</dd></div>
+          <div><dt>Declared permissions</dt><dd>${escapeText(review.script.grants.filter(grant => grant !== 'none').join(', ') || 'None declared')}</dd></div>
+        </dl>
+        <label for="script-source">Source code</label>
+        <div class="editor" id="review-editor" hidden></div>
+        <textarea class="textarea source-review" id="script-source" readonly spellcheck="false"></textarea>
+        <p class="status" id="review-editor-status" role="status"></p>
+        <button class="btn primary" id="script-approve">${escapeText(review.action)} script</button>
+      </div>`;
+    const fallback = details.querySelector('#script-source');
+    fallback.value = review.source;
+    mountCodeEditor(details.querySelector('#review-editor'), fallback, details.querySelector('#review-editor-status'), signal, true);
+    setStatus(status, 'User scripts can read and change matching pages. Review the source before approving.');
+    const approve = details.querySelector('#script-approve');
+    approve.onclick = runAction(approve, status, async () => {
+      cancel.disabled = true;
+      try {
+        await callWorkspace('install_script', { token: review.token });
+        setRoute('scripts');
+      } finally {
+        cancel.disabled = false;
+      }
+    });
+  };
+}
+
+let currentView;
+
+function render() {
+  currentView?.abort();
+  currentView = new AbortController();
+  const { signal } = currentView;
+  const route = currentRoute();
+  document.documentElement.dataset.page = route;
+  const section = ({ vault: 'server', 'install-script': 'scripts' })[route] || route;
+  document.querySelectorAll('[data-route]').forEach(button => {
+    if (button.dataset.route === section) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  const view = document.getElementById('view');
+
+  if (['setup', 'server', 'vault'].includes(route)) {
+    renderServer(view, route === 'setup');
+    return;
+  }
+  if (route === 'install-script') {
+    renderScriptReview(view, signal);
+    return;
+  }
+
+  if (route === 'home') { renderHomeDashboard(view); return; }
+  if (route === 'bookmarks') { renderBookmarksDashboard(view); return; }
+  if (route === 'history') { renderHistoryDashboard(view, signal); return; }
+
+  if (route === 'logins') { renderLoginsDashboard(view); return; }
+  if (route === 'adblock') { renderAdblockDashboard(view); return; }
+  if (route === 'scripts') { renderScriptsDashboard(view, signal); return; }
+  if (route === 'extensions') { renderExtensionsDashboard(view, signal); return; }
+
+  view.innerHTML = `
+    <header class="page-header"><h1>Settings</h1></header>
+    <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <button class="settings-tab" type="button" role="tab" data-settings-tab="general" aria-selected="true">General</button>
+      <button class="settings-tab" type="button" role="tab" data-settings-tab="privacy" aria-selected="false">Privacy &amp; DNS</button>
+      <button class="settings-tab" type="button" role="tab" data-settings-tab="performance" aria-selected="false">Performance</button>
+      <button class="settings-tab" type="button" role="tab" data-settings-tab="security" aria-selected="false">Security</button>
+    </div>
+    <form class="settings-form" id="home-settings" novalidate>
+      <div class="settings-panel" data-settings-panel="general" role="tabpanel">
+      <section class="settings-section" aria-labelledby="navigation-settings">
+        <h2 id="navigation-settings">Navigation</h2>
+        <div class="listitem">
+          <div><strong>Show Home button</strong><small id="home-toggle-state">Loading preference…</small></div>
+          ${iconToggle('home', 'Show Home button', false)}
+        </div>
+        <label class="setting-field" id="home-destination" hidden>Home button destination
+          <input class="input" name="home_url" value="harbor://home" placeholder="harbor://home or https://example.com" required>
+        </label>
+      </section>
+      <section class="settings-section" aria-labelledby="search-settings">
+        <h2 id="search-settings">Search</h2>
+        <label class="setting-field">Search engine
+          <span class="select-wrap"><select class="input" name="search_engine">
+            <option value="duck_duck_go">DuckDuckGo</option><option value="google">Google</option>
+            <option value="bing">Bing</option><option value="brave">Brave Search</option><option value="custom">Custom</option>
+          </select></span>
+        </label>
+        <div id="custom-search" hidden>
+          <label class="setting-field">Custom search URL
+            <input class="input" name="custom_search_url" aria-describedby="search-template-help" placeholder="https://search.example.com/?q={query}" required disabled>
+          </label>
+          <small class="subtle" id="search-template-help">Put {query} where the search terms go.</small>
+        </div>
+      </section>
+      </div>
+      <div class="settings-panel" data-settings-panel="privacy" role="tabpanel" hidden>
+      <section class="settings-section" aria-labelledby="dns-settings">
+        <h2 id="dns-settings">DNS &amp; Privacy</h2>
+        <p class="subtle compact">Encrypt DNS lookups with DNS-over-HTTPS (DoH) or use your system resolver.</p>
+        <div class="dns-presets" role="radiogroup" aria-labelledby="dns-settings">
+          <label class="dns-card"><input type="radio" name="dns_preset" value="automatic" checked>
+            <span class="dns-card-title">Automatic</span><span class="dns-card-sub">OS / network DoH</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="cloudflare">
+            <span class="dns-card-title">Cloudflare</span><span class="dns-card-sub">1.1.1.1 · Fast &amp; private</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="quad9">
+            <span class="dns-card-title">Quad9</span><span class="dns-card-sub">9.9.9.9 · Malware block</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="adguard">
+            <span class="dns-card-title">AdGuard DNS</span><span class="dns-card-sub">Blocks ads &amp; trackers</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="mullvad">
+            <span class="dns-card-title">Mullvad DNS</span><span class="dns-card-sub">No-logging · Privacy</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="google">
+            <span class="dns-card-title">Google</span><span class="dns-card-sub">8.8.8.8 · Public DNS</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="off">
+            <span class="dns-card-title">Off</span><span class="dns-card-sub">Standard system DNS</span></label>
+          <label class="dns-card"><input type="radio" name="dns_preset" value="custom">
+            <span class="dns-card-title">Custom</span><span class="dns-card-sub">Your DoH endpoint</span></label>
+        </div>
+        <div class="dns-endpoint" id="dns-endpoint-hint"></div>
+        <div id="custom-dns" hidden>
+          <label class="setting-field">Custom DNS-over-HTTPS URL
+            <input class="input" name="custom_dns_url" type="url" aria-describedby="dns-template-help" placeholder="https://dns.example.com/dns-query" required disabled>
+          </label>
+          <small class="subtle" id="dns-template-help">Enter an HTTPS DNS-over-HTTPS endpoint.</small>
+        </div>
+      </section>
+      </div>
+      <div class="settings-panel" data-settings-panel="performance" role="tabpanel" hidden>
+      <section class="settings-section" aria-labelledby="background-tab-settings">
+        <h2 id="background-tab-settings">Background Tabs &amp; Performance</h2>
+        <p class="subtle compact">Keep background tabs running without GPU rendering so music, audio, and web apps stay alive.</p>
+        <div class="listitem">
+          <div><strong>Keep background tabs alive</strong><small id="bg-tabs-state">Loading preference…</small></div>
+          ${iconToggle('bg-tabs', 'Keep background tabs alive', true)}
+        </div>
+        <div id="bg-tabs-options">
+          <label class="setting-field">Maximum live background tabs
+            <span class="select-wrap"><select class="input" name="background_tab_limit">
+              <option value="3">3 background tabs</option>
+              <option value="5">5 background tabs</option>
+              <option value="8" selected>8 background tabs (Recommended)</option>
+              <option value="12">12 background tabs</option>
+              <option value="0">Unlimited</option>
+            </select></span>
+          </label>
+          <label class="setting-field">Put inactive background tabs to sleep after
+            <span class="select-wrap"><select class="input" name="sleep_tabs_after_minutes">
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30" selected>30 minutes (Recommended)</option>
+              <option value="60">1 hour</option>
+              <option value="0">Never</option>
+            </select></span>
+          </label>
+          <div class="listitem">
+            <div><strong>Never sleep tabs playing audio</strong><small id="bg-audio-state">Keeps music players like Spotify active in the background</small></div>
+            ${iconToggle('bg-audio', 'Never sleep tabs playing audio', true)}
+          </div>
+        </div>
+      </section>
+      </div>
+      <div class="row" id="settings-save-row"><button class="btn primary" type="submit" disabled>Save settings</button></div>
+      <p class="status" id="home-status" role="status"></p>
+    </form>
+    <div class="settings-panel" data-settings-panel="security" role="tabpanel" hidden>
+    <section class="section settings-section" aria-labelledby="security-settings">
+      <h2 id="security-settings">Security</h2>
+      <div class="listitem">
+        <div><strong>Local record encryption</strong><small>Authenticated encryption with a key in Windows Credential Manager</small></div>
+      </div>
+      <div class="listitem">
+        <div><strong>Sync connection</strong><small>TLS 1.3 with public certificate validation or a configured fingerprint</small></div>
+      </div>
+    </section>
+    </div>`;
+  if (route === 'settings') {
+    const tabButtons = view.querySelectorAll('[data-settings-tab]');
+    const tabPanels = view.querySelectorAll('[data-settings-panel]');
+    const saveRow = view.querySelector('#settings-save-row');
+    const selectSettingsTab = name => {
+      tabButtons.forEach(btn => btn.setAttribute('aria-selected', String(btn.dataset.settingsTab === name)));
+      tabPanels.forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== name; });
+      if (saveRow) saveRow.hidden = name === 'security';
+    };
+    tabButtons.forEach(btn => { btn.onclick = () => selectSettingsTab(btn.dataset.settingsTab); });
+    const form = view.querySelector('#home-settings');
+    const status = form.querySelector('#home-status');
+    const save = form.querySelector('[type=submit]');
+    const toggle = form.querySelector('[data-action=home]');
+    const toggleState = form.querySelector('#home-toggle-state');
+    const destination = form.querySelector('#home-destination');
+    const bgToggle = form.querySelector('[data-action=bg-tabs]');
+    const bgToggleState = form.querySelector('#bg-tabs-state');
+    const bgOptions = form.querySelector('#bg-tabs-options');
+    const bgAudioToggle = form.querySelector('[data-action=bg-audio]');
+    const custom = form.querySelector('#custom-search');
+    const customDns = form.querySelector('#custom-dns');
+    const dnsHint = form.querySelector('#dns-endpoint-hint');
+    const dnsEndpoints = {
+      automatic: 'Active resolver: Automatic (uses system/network DoH when supported)',
+      cloudflare: 'Active endpoint: https://cloudflare-dns.com/dns-query',
+      quad9: 'Active endpoint: https://dns.quad9.net/dns-query',
+      adguard: 'Active endpoint: https://dns.adguard-dns.com/dns-query',
+      mullvad: 'Active endpoint: https://doh.mullvad.net/dns-query',
+      google: 'Active endpoint: https://dns.google/dns-query',
+      off: 'Active resolver: Standard unencrypted system DNS',
+      custom: ''
+    };
+    let savedHomeUrl;
+    const showHome = enabled => {
+      toggle.setAttribute('aria-pressed', String(enabled));
+      toggleState.textContent = enabled ? 'On · Appears next to Back and Forward' : 'Off · Hidden from the toolbar';
+      destination.hidden = !enabled;
+      form.elements.home_url.disabled = !enabled;
+    };
+    toggle.disabled = true;
+    toggle.setAttribute('aria-describedby', 'home-toggle-state');
+    toggle.onclick = () => showHome(toggle.getAttribute('aria-pressed') !== 'true');
+    const showBgTabs = enabled => {
+      bgToggle.setAttribute('aria-pressed', String(enabled));
+      bgToggleState.textContent = enabled ? 'On · Background tabs stay live without rendering' : 'Off · Inactive tabs unload immediately';
+      bgOptions.hidden = !enabled;
+      form.elements.background_tab_limit.disabled = !enabled;
+      form.elements.sleep_tabs_after_minutes.disabled = !enabled;
+      bgAudioToggle.disabled = !enabled || save.disabled;
+    };
+    const showBgAudio = enabled => {
+      bgAudioToggle.setAttribute('aria-pressed', String(enabled));
+    };
+    bgToggle.disabled = true;
+    bgAudioToggle.disabled = true;
+    bgToggle.onclick = () => showBgTabs(bgToggle.getAttribute('aria-pressed') !== 'true');
+    bgAudioToggle.onclick = () => showBgAudio(bgAudioToggle.getAttribute('aria-pressed') !== 'true');
+    const showCustom = () => {
+      custom.hidden = form.elements.search_engine.value !== 'custom';
+      form.elements.custom_search_url.disabled = custom.hidden;
+    };
+    const showDns = () => {
+      const preset = form.elements.dns_preset.value || 'automatic';
+      customDns.hidden = preset !== 'custom';
+      form.elements.custom_dns_url.disabled = customDns.hidden;
+      dnsHint.textContent = dnsEndpoints[preset] || '';
+      dnsHint.hidden = !dnsHint.textContent;
+    };
+    form.elements.search_engine.onchange = showCustom;
+    form.querySelectorAll('input[name=dns_preset]').forEach(radio => { radio.onchange = showDns; });
+    const displaySettings = settings => {
+      showHome(settings.show_home_button);
+      savedHomeUrl = settings.home_url;
+      form.elements.home_url.value = settings.home_url;
+      form.elements.search_engine.value = settings.search_engine;
+      form.elements.custom_search_url.value = settings.custom_search_url;
+      form.elements.dns_preset.value = settings.dns_preset || 'automatic';
+      form.elements.custom_dns_url.value = settings.custom_dns_url || '';
+      showBgTabs(settings.background_tabs_enabled !== false);
+      form.elements.background_tab_limit.value = String(settings.background_tab_limit ?? 8);
+      form.elements.sleep_tabs_after_minutes.value = String(settings.sleep_tabs_after_minutes ?? 30);
+      showBgAudio(settings.sleep_preserve_audio !== false);
+      showCustom();
+      showDns();
+    };
+    form.onsubmit = runAction(save, status, async () => {
+      const payload = {
+        show_home_button: toggle.getAttribute('aria-pressed') === 'true',
+        home_url: destination.hidden ? savedHomeUrl : form.elements.home_url.value,
+        search_engine: form.elements.search_engine.value,
+        custom_search_url: form.elements.custom_search_url.value,
+        dns_preset: form.elements.dns_preset.value || 'automatic',
+        custom_dns_url: form.elements.custom_dns_url.value,
+        background_tabs_enabled: bgToggle.getAttribute('aria-pressed') === 'true',
+        background_tab_limit: Number(form.elements.background_tab_limit.value),
+        sleep_tabs_after_minutes: Number(form.elements.sleep_tabs_after_minutes.value),
+        sleep_preserve_audio: bgAudioToggle.getAttribute('aria-pressed') === 'true'
+      };
+      toggle.disabled = bgToggle.disabled = bgAudioToggle.disabled = form.elements.search_engine.disabled = true;
+      form.elements.background_tab_limit.disabled = form.elements.sleep_tabs_after_minutes.disabled = true;
+      form.querySelectorAll('input[name=dns_preset]').forEach(r => { r.disabled = true; });
+      form.elements.home_url.readOnly = form.elements.custom_search_url.readOnly = form.elements.custom_dns_url.readOnly = true;
+      try {
+        displaySettings(await callWorkspace('save_home_settings', payload));
+        setStatus(status, 'Settings saved.');
+      } finally {
+        toggle.disabled = bgToggle.disabled = form.elements.search_engine.disabled = false;
+        showBgTabs(bgToggle.getAttribute('aria-pressed') === 'true');
+        form.querySelectorAll('input[name=dns_preset]').forEach(r => { r.disabled = false; });
+        form.elements.home_url.readOnly = form.elements.custom_search_url.readOnly = form.elements.custom_dns_url.readOnly = false;
+      }
+    });
+    callWorkspace('state').then(settings => {
+      save.disabled = toggle.disabled = bgToggle.disabled = false;
+      displaySettings(settings);
+    }).catch(error => setStatus(status, error.message, true));
+  }
+}
+
+window.addEventListener('hashchange', render);
+window.addEventListener('pagehide', () => currentView?.abort());
+window.addEventListener('pageshow', event => { if (event.persisted && currentRoute() !== 'install-script') render(); });
+render();
+</script>
+</body>
+</html>
