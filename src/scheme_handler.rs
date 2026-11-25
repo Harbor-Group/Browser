@@ -54,9 +54,25 @@ pub struct SchemeResponse {
 impl SchemeResponse {
     pub fn render_body(&self) -> Vec<u8> {
         if self.body == INTERNAL_HTML {
+            let pages_js = [
+                include_str!("../ui/pages/home.js"),
+                include_str!("../ui/pages/bookmarks.js"),
+                include_str!("../ui/pages/history.js"),
+                include_str!("../ui/pages/adblock.js"),
+                include_str!("../ui/pages/logins.js"),
+                include_str!("../ui/pages/scripts.js"),
+                include_str!("../ui/pages/extensions.js"),
+                include_str!("../ui/pages/server.js"),
+                include_str!("../ui/pages/settings.js"),
+            ]
+            .join("\n");
             self.body
                 .replace("/* HARBOR_WORKSPACE_CSS */", WORKSPACE_CSS)
-                .replace("/* HARBOR_DASHBOARD */", include_str!("../ui/dashboard.js"))
+                .replace(
+                    "/* HARBOR_SDK_JS */",
+                    include_str!("../ui/sdk/harbor-ipc.js"),
+                )
+                .replace("/* HARBOR_PAGES_JS */", &pages_js)
                 .into_bytes()
         } else {
             self.body.as_bytes().to_vec()
