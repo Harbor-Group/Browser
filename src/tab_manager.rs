@@ -143,10 +143,10 @@ impl TabManager {
                 return self.tabs.iter().find(|t| t.id == id);
             }
             self.touch_tab(self.active_tab_id, now);
-            if self.active_space != tab_space {
-                if let Some(split_id) = self.split_tab_id.take() {
-                    self.touch_tab(split_id, now);
-                }
+            if self.active_space != tab_space
+                && let Some(split_id) = self.split_tab_id.take()
+            {
+                self.touch_tab(split_id, now);
             }
             self.active_space = tab_space;
             self.active_tab_id = id;
@@ -160,10 +160,10 @@ impl TabManager {
     pub fn switch_space(&mut self, space: SpaceKind) -> Option<&TabEntry> {
         let now = Instant::now();
         self.touch_tab(self.active_tab_id, now);
-        if self.active_space != space {
-            if let Some(split_id) = self.split_tab_id.take() {
-                self.touch_tab(split_id, now);
-            }
+        if self.active_space != space
+            && let Some(split_id) = self.split_tab_id.take()
+        {
+            self.touch_tab(split_id, now);
         }
         self.focused_tab_id = None;
         self.active_space = space;
@@ -243,10 +243,10 @@ impl TabManager {
     pub fn focus_cef_browser(&mut self, cef_id: i32) {
         if self.cef_browser_ids.get(&self.active_tab_id) == Some(&cef_id) {
             self.focused_tab_id = None;
-        } else if let Some(right) = self.split_tab_id {
-            if self.cef_browser_ids.get(&right) == Some(&cef_id) {
-                self.focused_tab_id = Some(right);
-            }
+        } else if let Some(right) = self.split_tab_id
+            && self.cef_browser_ids.get(&right) == Some(&cef_id)
+        {
+            self.focused_tab_id = Some(right);
         }
     }
 
@@ -315,11 +315,11 @@ impl TabManager {
         let Some(tab_id) = self.tab_id_for_cef(cef_id) else {
             return false;
         };
-        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
-            if tab.audible != audible {
-                tab.audible = audible;
-                return true;
-            }
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id)
+            && tab.audible != audible
+        {
+            tab.audible = audible;
+            return true;
         }
         false
     }

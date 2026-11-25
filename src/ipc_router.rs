@@ -127,24 +127,22 @@ pub fn normalize_address_input(raw: &str, settings: &crate::workspace::HomeSetti
     if trimmed.is_empty() {
         return "harbor://home".to_string();
     }
-    if let Ok(url) = reqwest::Url::parse(trimmed) {
-        if matches!(url.scheme(), "http" | "https")
-            || (url.scheme() == "harbor" && url.host_str() != Some("chrome") && url.has_host())
-        {
-            return url.into();
-        }
+    if let Ok(url) = reqwest::Url::parse(trimmed)
+        && (matches!(url.scheme(), "http" | "https")
+            || (url.scheme() == "harbor" && url.host_str() != Some("chrome") && url.has_host()))
+    {
+        return url.into();
     }
-    if !trimmed.contains("://") && !trimmed.contains(char::is_whitespace) {
-        if let Ok(url) = reqwest::Url::parse(&format!("https://{trimmed}")) {
-            if url
-                .host_str()
-                .is_some_and(|host| host.contains('.') || host == "localhost")
-                && url.username().is_empty()
-                && url.password().is_none()
-            {
-                return url.into();
-            }
-        }
+    if !trimmed.contains("://")
+        && !trimmed.contains(char::is_whitespace)
+        && let Ok(url) = reqwest::Url::parse(&format!("https://{trimmed}"))
+        && url
+            .host_str()
+            .is_some_and(|host| host.contains('.') || host == "localhost")
+        && url.username().is_empty()
+        && url.password().is_none()
+    {
+        return url.into();
     }
     crate::workspace::search_address(settings, trimmed)
 }
@@ -392,35 +390,34 @@ pub fn dispatch_ipc(runtime: &HarborRuntime, raw_json: &str) -> IpcResult {
                 .map(|t| t.url.clone())
                 .unwrap_or_default();
             drop(tabs);
-            if let Ok(url) = reqwest::Url::parse(&url) {
-                if let Some(host) = url
+            if let Ok(url) = reqwest::Url::parse(&url)
+                && let Some(host) = url
                     .host_str()
                     .filter(|_| matches!(url.scheme(), "http" | "https"))
-                {
-                    let store = runtime.store.lock().expect("store lock");
-                    let (list_urls, custom_rules, mut allowlisted_domains) =
-                        crate::load_saved_adblock_config(&store);
-                    let enable = !allowlisted_domains.iter().any(|domain| domain == host);
-                    if enable {
-                        allowlisted_domains.push(host.to_string());
-                    } else {
-                        allowlisted_domains.retain(|domain| domain != host);
-                    }
-                    let config = AdblockConfigPayload {
-                        list_urls,
-                        custom_rules,
-                        allowlisted_domains,
-                    };
-                    if crate::workspace::store_adblock(&store, &config).is_ok() {
-                        runtime
-                            .adblock
-                            .lock()
-                            .expect("adblock lock")
-                            .set_allowlisted(host, enable);
-                        runtime.sync.changed();
-                        runtime.filters_changed.notify_one();
-                        host_action = HostAction::Reload;
-                    }
+            {
+                let store = runtime.store.lock().expect("store lock");
+                let (list_urls, custom_rules, mut allowlisted_domains) =
+                    crate::load_saved_adblock_config(&store);
+                let enable = !allowlisted_domains.iter().any(|domain| domain == host);
+                if enable {
+                    allowlisted_domains.push(host.to_string());
+                } else {
+                    allowlisted_domains.retain(|domain| domain != host);
+                }
+                let config = AdblockConfigPayload {
+                    list_urls,
+                    custom_rules,
+                    allowlisted_domains,
+                };
+                if crate::workspace::store_adblock(&store, &config).is_ok() {
+                    runtime
+                        .adblock
+                        .lock()
+                        .expect("adblock lock")
+                        .set_allowlisted(host, enable);
+                    runtime.sync.changed();
+                    runtime.filters_changed.notify_one();
+                    host_action = HostAction::Reload;
                 }
             }
         }

@@ -1,4 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
 pub enum RunAt {
     DocumentStart,
     DocumentEnd,
@@ -143,49 +144,48 @@ pub(crate) fn pattern_matches_url(pattern: &str, url: &str) -> bool {
         return url.starts_with("http://") || url.starts_with("https://");
     }
     // Regex literal: /pattern/ or /pattern/i
-    if let Some(rest) = pattern.strip_prefix('/') {
-        if let Some((regex_body, flags)) = rest.rsplit_once('/') {
-            if flags.chars().all(|c| matches!(c, 'i' | 'm' | 's' | 'u')) {
-                return mini_regex_match(regex_body, url, flags.contains('i'));
-            }
-        }
+    if let Some(rest) = pattern.strip_prefix('/')
+        && let Some((regex_body, flags)) = rest.rsplit_once('/')
+        && flags.chars().all(|c| matches!(c, 'i' | 'm' | 's' | 'u'))
+    {
+        return mini_regex_match(regex_body, url, flags.contains('i'));
     }
     // Chrome/Tampermonkey @match syntax: <scheme>://<host><path>
-    if let Some((scheme_pat, after_scheme)) = pattern.split_once("://") {
-        if let Some((url_scheme, url_after_scheme)) = url.split_once("://") {
-            let scheme_ok = if scheme_pat == "*" {
-                url_scheme.eq_ignore_ascii_case("http") || url_scheme.eq_ignore_ascii_case("https")
-            } else {
-                wildcard_match_ci(scheme_pat, url_scheme)
-            };
-            if !scheme_ok {
-                return false;
-            }
-            let (pat_host, pat_path) = match after_scheme.find('/') {
-                Some(idx) => (&after_scheme[..idx], &after_scheme[idx..]),
-                None => (after_scheme, "/*"),
-            };
-            let (url_host_port, url_path) = match url_after_scheme.find('/') {
-                Some(idx) => (&url_after_scheme[..idx], &url_after_scheme[idx..]),
-                None => (url_after_scheme, "/"),
-            };
-            let url_host = url_host_port.split(':').next().unwrap_or(url_host_port);
-            let pat_host_only = pat_host.split(':').next().unwrap_or(pat_host);
-            let host_ok = if let Some(base) = pat_host_only.strip_prefix("*.") {
-                url_host.eq_ignore_ascii_case(base)
-                    || url_host
-                        .to_ascii_lowercase()
-                        .ends_with(&format!(".{}", base.to_ascii_lowercase()))
-            } else if pat_host_only == "*" {
-                true
-            } else {
-                wildcard_match_ci(pat_host_only, url_host)
-            };
-            if !host_ok {
-                return false;
-            }
-            return wildcard_match(pat_path, url_path);
+    if let Some((scheme_pat, after_scheme)) = pattern.split_once("://")
+        && let Some((url_scheme, url_after_scheme)) = url.split_once("://")
+    {
+        let scheme_ok = if scheme_pat == "*" {
+            url_scheme.eq_ignore_ascii_case("http") || url_scheme.eq_ignore_ascii_case("https")
+        } else {
+            wildcard_match_ci(scheme_pat, url_scheme)
+        };
+        if !scheme_ok {
+            return false;
         }
+        let (pat_host, pat_path) = match after_scheme.find('/') {
+            Some(idx) => (&after_scheme[..idx], &after_scheme[idx..]),
+            None => (after_scheme, "/*"),
+        };
+        let (url_host_port, url_path) = match url_after_scheme.find('/') {
+            Some(idx) => (&url_after_scheme[..idx], &url_after_scheme[idx..]),
+            None => (url_after_scheme, "/"),
+        };
+        let url_host = url_host_port.split(':').next().unwrap_or(url_host_port);
+        let pat_host_only = pat_host.split(':').next().unwrap_or(pat_host);
+        let host_ok = if let Some(base) = pat_host_only.strip_prefix("*.") {
+            url_host.eq_ignore_ascii_case(base)
+                || url_host
+                    .to_ascii_lowercase()
+                    .ends_with(&format!(".{}", base.to_ascii_lowercase()))
+        } else if pat_host_only == "*" {
+            true
+        } else {
+            wildcard_match_ci(pat_host_only, url_host)
+        };
+        if !host_ok {
+            return false;
+        }
+        return wildcard_match(pat_path, url_path);
     }
     wildcard_match(pattern, url)
 }
@@ -216,10 +216,10 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
             return false;
         }
     }
-    if !pattern.ends_with('*') {
-        if let Some(last) = parts.last() {
-            return text.ends_with(last);
-        }
+    if !pattern.ends_with('*')
+        && let Some(last) = parts.last()
+    {
+        return text.ends_with(last);
     }
     true
 }
@@ -247,17 +247,17 @@ fn regex_here(p: &[char], pi: usize, t: &[char], ti: usize, ci: bool) -> bool {
         return ti == t.len();
     }
     // Handle non-capturing or capturing alternation groups: (a|b) or (?:a|b)
-    if p[pi] == '(' {
-        if let Some(close) = find_matching_paren(p, pi) {
-            let inner_start = if pi + 2 < close && p[pi + 1] == '?' && p[pi + 2] == ':' {
-                pi + 3
-            } else {
-                pi + 1
-            };
-            let (min_rep, max_rep, next_pi) = parse_quantifier(p, close + 1);
-            let branches = split_top_level_alts(&p[inner_start..close]);
-            return match_group_reps(&branches, p, next_pi, t, ti, min_rep, max_rep, ci, 0);
-        }
+    if p[pi] == '('
+        && let Some(close) = find_matching_paren(p, pi)
+    {
+        let inner_start = if pi + 2 < close && p[pi + 1] == '?' && p[pi + 2] == ':' {
+            pi + 3
+        } else {
+            pi + 1
+        };
+        let (min_rep, max_rep, next_pi) = parse_quantifier(p, close + 1);
+        let branches = split_top_level_alts(&p[inner_start..close]);
+        return match_group_reps(&branches, p, next_pi, t, ti, min_rep, max_rep, ci, 0);
     }
     let (atom_len, neg_class, class_end) = if p[pi] == '\\' && pi + 1 < p.len() {
         (2, false, pi + 2)
@@ -290,6 +290,7 @@ fn regex_here(p: &[char], pi: usize, t: &[char], ti: usize, ci: bool) -> bool {
     false
 }
 
+#[allow(clippy::too_many_arguments)]
 fn match_group_reps(
     branches: &[&[char]],
     p: &[char],

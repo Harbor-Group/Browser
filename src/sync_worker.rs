@@ -453,7 +453,7 @@ impl SyncClient {
                     if store.upsert_lww(
                         env.id,
                         env.item_type,
-                        &json,
+                        json,
                         env.deleted,
                         false,
                         env.updated_at,
@@ -605,14 +605,13 @@ impl SyncService {
         };
         let client = Self::client(store, &config)?;
         config.server_url = client.server_url.clone();
-        if let Some(previous) = Self::config(store)? {
-            if Self::client(store, &previous)?.is_paired()
-                || previous.server_url != config.server_url
-            {
-                return Err(SyncError::InvalidCredential(
-                    "this profile already has a sync server",
-                ));
-            }
+        if let Some(previous) = Self::config(store)?
+            && (Self::client(store, &previous)?.is_paired()
+                || previous.server_url != config.server_url)
+        {
+            return Err(SyncError::InvalidCredential(
+                "this profile already has a sync server",
+            ));
         }
         let config_json = serde_json::to_string(&config)
             .map_err(|_| SyncError::InvalidCredential("invalid server configuration"))?;
