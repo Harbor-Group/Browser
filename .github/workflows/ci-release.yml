@@ -73,15 +73,30 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binaries
-        run: cargo build --release
+      - name: Cache CEF runtime
+        uses: actions/cache@v4
+        with:
+          path: cef_binaries
+          key: cef-156.0.31-${{ runner.os }}
+
+      - name: Build harbor.dll (CEF runtime) and launcher harbor.exe
+        shell: pwsh
+        env:
+          CEF_PATH: ${{ github.workspace }}\cef_binaries
+        run: |
+          New-Item -ItemType Directory -Force -Path cef_binaries | Out-Null
+          cargo build --lib --release --features cef-runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --bin harbor --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package Windows artifact
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-pkg | Out-Null
           Copy-Item target/release/harbor.exe release-pkg/
-          if (Test-Path target/release/harbor.dll) { Copy-Item target/release/harbor.dll release-pkg/ }
+          Copy-Item target/release/harbor.dll release-pkg/
+          if (Test-Path harbor.ico) { Copy-Item harbor.ico release-pkg/ }
           Compress-Archive -Path release-pkg/* -DestinationPath harbor-browser-windows-x86_64.zip -Force
           $hash = (Get-FileHash harbor-browser-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
           "$hash  harbor-browser-windows-x86_64.zip" | Out-File -Encoding ascii harbor-browser-windows-x86_64.zip.sha256

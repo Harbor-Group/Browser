@@ -171,9 +171,7 @@ fn start_browser(sandbox_info: *mut u8) -> Result<(), Box<dyn std::error::Error>
 
 pub fn run_from_executable() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(all(windows, feature = "cef-runtime")) {
-        return Err(
-            "Launch output\\harbor.exe to start Harbor with the Windows CEF sandbox".into(),
-        );
+        return Err("CEF runtime (libcef.dll) is required next to harbor.exe.".into());
     }
     if let Some(code) = cef_shell::early_sub_process_check(std::ptr::null_mut()) {
         std::process::exit(code);
