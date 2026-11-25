@@ -1495,7 +1495,7 @@ mod runtime_impl {
                 }
                 if let Some(frame) = self.shell_state.toolbar_frame() {
                     frame.execute_java_script(
-                        Some(&CefString::from("if (!document.hasFocus()) window.__harborDismissForPageFocus?.();")),
+                        Some(&CefString::from("window.__harborDismissForPageFocus?.();")),
                         None,
                         0,
                     );

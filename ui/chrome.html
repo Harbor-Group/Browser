@@ -112,15 +112,14 @@ svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke
 }
 .addr-display{
   flex:1;min-width:0;height:100%;
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  display:flex;align-items:center;gap:8px;
   text-align:left;
 }
-.addr-left{display:flex;align-items:center;gap:7px;min-width:0}
-.lock-icon{color:#34d399;width:13px;height:13px}
-.tab-title{font-weight:500;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.domain-hint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-@media(max-width:860px){.domain-hint{display:none}}
-.kbd-hint{font-family:ui-monospace,Consolas,monospace;font-size:10px;color:var(--muted);flex:none}
+.addr-left{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
+.lock-icon{color:#34d399;width:13px;height:13px;flex:none}
+.tab-title{font-weight:500;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.domain-hint,.kbd-hint{display:none}
+:root.has-popover .topbar{-webkit-app-region:no-drag}
 .cmd-wrap{flex:1;min-width:0;height:100%;display:none;align-items:center;gap:7px}
 .addr-shell.open .addr-display{display:none}
 .addr-shell.open .cmd-wrap{display:flex}
@@ -499,6 +498,7 @@ function publishPopover() {
 
 function setPopover(name) {
   displayPopover(state.openPopover === name ? null : name);
+  document.documentElement.classList.toggle('has-popover', Boolean(state.openPopover));
   if (state.openPopover === 'command') {
     cmdInput.value = '';
     renderCommandSuggestions('');
@@ -513,9 +513,12 @@ function setPopover(name) {
   publishPopover();
 }
 
-window.__harborClosePopover = () => displayPopover(null);
+window.__harborClosePopover = () => {
+  displayPopover(null);
+  document.documentElement.classList.remove('has-popover');
+};
 window.__harborDismissForPageFocus = () => {
-  if (state.openPopover === 'command' || state.openPopover === 'shelf') setPopover(null);
+  if (state.openPopover) setPopover(null);
 };
 window.__harborShowPopover = ({ kind, query }) => {
   displayPopover(kind);
@@ -526,12 +529,26 @@ window.__harborShowPopover = ({ kind, query }) => {
 };
 
 if (!isPopover) {
+  const triggerFor = {
+    command: addrShell,
+    shelf: tabsBtn,
+    bookmarks: bmBtn,
+    extensions: extBtn,
+    menu: menuBtn
+  };
   document.addEventListener('pointerdown', event => {
-    if ((state.openPopover === 'command' && !addrShell.contains(event.target))
-      || (state.openPopover === 'shelf' && !tabsBtn.contains(event.target))) {
+    const activeTrigger = triggerFor[state.openPopover];
+    if (activeTrigger && !activeTrigger.contains(event.target)) {
       setPopover(null);
     }
   }, { capture: true });
+  cmdInput.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (state.openPopover === 'command' && document.hasFocus() && !addrShell.contains(document.activeElement)) {
+        setPopover(null);
+      }
+    }, 80);
+  });
   window.addEventListener('resize', () => {
     if (state.openPopover) publishPopover();
   });
@@ -620,18 +637,121 @@ function renderExtensions() {
   backBtn.onclick = () => { renderExtensions(); publishPopover(); };
 }
 
+let cmdActions = [];
+let cmdSelected = 0;
+
+function builtinCommands() {
+  return [
+    { keys: ['refresh', 'reload'], label: 'Refresh Page', sub: 'Reload the current tab', badge: 'Ctrl+R', action: () => ipc.send('nav_reload') },
+    { keys: ['back'], label: 'Go Back', sub: 'Navigate back in history', badge: 'Nav', action: () => ipc.send('nav_back') },
+    { keys: ['forward'], label: 'Go Forward', sub: 'Navigate forward in history', badge: 'Nav', action: () => ipc.send('nav_forward') },
+    { keys: ['new', 'new tab'], label: 'New Tab', sub: 'Open a new tab in current space', badge: 'Ctrl+T', action: () => ipc.send('tab_new') },
+    { keys: ['close', 'close tab'], label: 'Close Current Tab', sub: 'Close the active tab', badge: 'Tab', action: () => ipc.send('tab_close', { id: state.activeId }) },
+    { keys: ['split', 'split view'], label: state.split ? 'Close Split View' : 'Open Split View', sub: 'Toggle side-by-side tabs', badge: 'View', action: () => ipc.send('toggle_split') },
+    { keys: ['reader', 'reader mode'], label: 'Toggle Reader Mode', sub: 'Clean article view', badge: 'View', action: () => ipc.send('toggle_reader') },
+    { keys: ['devtools', 'inspect', 'dev'], label: 'Toggle Developer Tools', sub: 'Open or close Chromium DevTools', badge: 'F12', action: () => ipc.send('toggle_dev_tools') },
+    { keys: ['bookmark', 'save'], label: 'Bookmark Current Page', sub: 'Save or remove current page bookmark', badge: 'Star', action: () => ipc.send('bookmark_toggle') },
+    { keys: ['home'], label: 'Home', sub: 'harbor://home', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://home' }) },
+    { keys: ['settings', 'prefs'], label: 'Settings', sub: 'harbor://settings', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://settings' }) },
+    { keys: ['bookmarks', 'bm'], label: 'Bookmarks Manager', sub: 'harbor://bookmarks', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://bookmarks' }) },
+    { keys: ['extensions', 'ext'], label: 'Extensions', sub: 'harbor://extensions', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://extensions' }) },
+    { keys: ['history'], label: 'History', sub: 'harbor://history', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://history' }) },
+    { keys: ['logins', 'passwords'], label: 'Saved Logins', sub: 'harbor://logins', badge: 'Page', action: () => ipc.send('navigate', { input: 'harbor://logins' }) },
+    { keys: ['adblock', 'filters'], label: 'Custom Filter Lists', sub: 'harbor://adblock', badge: 'Adblock', action: () => ipc.send('navigate', { input: 'harbor://adblock' }) },
+    { keys: ['scripts', 'userscripts'], label: 'User Scripts', sub: 'harbor://scripts', badge: 'Scripts', action: () => ipc.send('navigate', { input: 'harbor://scripts' }) },
+    { keys: ['server', 'sync'], label: 'Home Sync Server', sub: 'harbor://server', badge: 'Vault', action: () => ipc.send('navigate', { input: 'harbor://server' }) }
+  ];
+}
+
 function renderCommandSuggestions(q) {
   const query = q.trim();
-  const rows = [
-    { label: query ? `Navigate to "${query}"` : 'Go to harbor://home', sub: 'Open in active tab', badge: 'Enter', action: () => ipc.send('navigate', { input: query || 'harbor://home' }) },
-    { label: 'Custom Filter Lists', sub: 'harbor://adblock', badge: 'Adblock', action: () => ipc.send('navigate', { input: 'harbor://adblock' }) },
-    { label: 'JavaScript User Scripts', sub: 'harbor://scripts', badge: 'Scripts', action: () => ipc.send('navigate', { input: 'harbor://scripts' }) },
-    { label: 'Home Sync Server', sub: 'harbor://server', badge: 'Vault', action: () => ipc.send('navigate', { input: 'harbor://server' }) }
-  ];
+  const isCmdMode = query.startsWith('/') || query.startsWith('>');
+  const term = (isCmdMode ? query.slice(1) : query).trim().toLowerCase();
+  const rows = [];
+
+  if (query && !isCmdMode) {
+    rows.push({
+      label: `Navigate to "${query}"`,
+      sub: 'Open URL or search in active tab',
+      badge: 'Enter',
+      action: () => ipc.send('navigate', { input: query })
+    });
+  }
+
+  // Match bookmark by 1-based order (e.g., "bm 1", "bookmark 2", "#1", or "1")
+  const bmIndexMatch = term.match(/^(?:bm|bookmark|#)\s*(\d+)$/) || (/^\d+$/.test(term) ? [term, term] : null);
+  if (bmIndexMatch) {
+    const idx = Number(bmIndexMatch[1]) - 1;
+    const bm = (state.bookmarks || [])[idx];
+    if (bm) {
+      const bmRow = {
+        label: `Open Bookmark #${idx + 1}: ${bm.title}`,
+        sub: bm.url,
+        badge: `#${idx + 1}`,
+        action: () => ipc.send('navigate', { input: bm.url })
+      };
+      if (term.startsWith('bm') || term.startsWith('bookmark') || term.startsWith('#')) {
+        rows.unshift(bmRow);
+      } else {
+        rows.push(bmRow);
+      }
+    }
+  }
+
+  // Match open tab by 1-based order (e.g., "tab 2")
+  const tabIndexMatch = term.match(/^tab\s+(\d+)$/);
+  if (tabIndexMatch) {
+    const idx = Number(tabIndexMatch[1]) - 1;
+    const tab = (state.tabs || [])[idx];
+    if (tab) {
+      rows.unshift({
+        label: `Switch to Tab #${idx + 1}: ${tab.title}`,
+        sub: tab.url,
+        badge: 'Tab',
+        action: () => ipc.send('tab_select', { id: tab.id })
+      });
+    }
+  }
+
+  const cmds = builtinCommands();
+  const matchedCmds = term
+    ? cmds.filter(c => c.keys.some(k => k.includes(term)) || c.label.toLowerCase().includes(term))
+    : cmds.slice(0, 5);
+  matchedCmds.forEach(c => {
+    const exact = term && c.keys.includes(term);
+    if (exact && !isCmdMode) rows.unshift(c);
+    else rows.push(c);
+  });
+
+  if (term) {
+    (state.bookmarks || []).forEach((bm, idx) => {
+      if (bm.title.toLowerCase().includes(term) || bm.url.toLowerCase().includes(term)) {
+        rows.push({
+          label: bm.title,
+          sub: bm.url,
+          badge: `Bookmark #${idx + 1}`,
+          action: () => ipc.send('navigate', { input: bm.url })
+        });
+      }
+    });
+    (state.tabs || []).forEach(tab => {
+      if (tab.title.toLowerCase().includes(term) || tab.url.toLowerCase().includes(term)) {
+        rows.push({
+          label: tab.title,
+          sub: tab.url,
+          badge: `${tab.space} Tab`,
+          action: () => ipc.send('tab_select', { id: tab.id })
+        });
+      }
+    });
+  }
+
+  cmdActions = rows.slice(0, 10);
+  cmdSelected = 0;
   cmdDropdown.innerHTML = '';
-  rows.forEach((r, idx) => {
+  cmdActions.forEach((r, idx) => {
     const btn = document.createElement('button');
-    btn.className = 'cmd-item' + (idx === 0 ? ' first' : '');
+    btn.className = 'cmd-item' + (idx === cmdSelected ? ' first' : '');
     btn.innerHTML = `<span><span style="display:block;font-weight:500"></span><span class="pop-sub"></span></span><span class="badge"></span>`;
     btn.querySelector('span > span:first-child').textContent = r.label;
     btn.querySelector('.pop-sub').textContent = r.sub;
@@ -648,9 +768,22 @@ cmdInput.addEventListener('input', () => {
   publishPopover();
 });
 cmdInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.isComposing) {
+  if (e.key === 'ArrowDown' && cmdActions.length) {
     e.preventDefault();
-    ipc.send('navigate', { input: cmdInput.value.trim() || state.url });
+    cmdSelected = (cmdSelected + 1) % cmdActions.length;
+    cmdDropdown.querySelectorAll('.cmd-item').forEach((el, i) => el.classList.toggle('first', i === cmdSelected));
+  } else if (e.key === 'ArrowUp' && cmdActions.length) {
+    e.preventDefault();
+    cmdSelected = (cmdSelected - 1 + cmdActions.length) % cmdActions.length;
+    cmdDropdown.querySelectorAll('.cmd-item').forEach((el, i) => el.classList.toggle('first', i === cmdSelected));
+  } else if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    const chosen = cmdActions[cmdSelected];
+    if (chosen) {
+      chosen.action();
+    } else {
+      ipc.send('navigate', { input: cmdInput.value.trim() || state.url });
+    }
     setPopover(null);
   }
 });
@@ -715,7 +848,8 @@ window.__harborUpdateChrome = function(patch) {
   document.getElementById('tabs-space').textContent = state.space;
   tabsBtn.dataset.space = state.space;
   tabsBtn.title = `${state.space} space: ${state.tabCount} ${state.tabCount === 1 ? 'tab' : 'tabs'}`;
-  document.getElementById('tab-title').textContent = state.title;
+  document.getElementById('tab-title').textContent = state.title || state.url || 'New Tab';
+  document.getElementById('addr-display').title = state.url || 'Click or press Ctrl+K to search or enter URL';
   document.getElementById('domain-hint').textContent = state.url;
   document.getElementById('shield-count').textContent = String(state.blocked);
   document.getElementById('shield-switch').classList.toggle('on', Boolean(state.shieldOn));
