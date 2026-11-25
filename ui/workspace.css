@@ -47,6 +47,23 @@ code { overflow-wrap: anywhere }
 .page-header h1 + p { margin-top: 10px; max-width: 68ch }
 .section { margin-block: 28px }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(14px, 2.5vw, 24px); margin-bottom: 18px; min-width: 0 }
+.ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 14px; margin-top: 12px }
+.ext-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; transition: border-color .14s, background .14s }
+.ext-card:hover { border-color: var(--muted) }
+.ext-card-head { display: flex; align-items: flex-start; gap: 12px }
+.ext-avatar { width: 38px; height: 38px; border-radius: 10px; background: var(--accent-bg); border: 1px solid #40657c; color: var(--accent); font-weight: 700; font-size: 1rem; display: grid; place-items: center; flex: none }
+.ext-meta { min-width: 0; flex: 1 }
+.ext-meta h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere }
+.ext-sub { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: .82rem; color: var(--muted) }
+.ext-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--page); border: 1px solid var(--line); font-size: .78rem; color: var(--muted) }
+.ext-pill.on { color: var(--accent); border-color: #40657c; background: var(--accent-bg) }
+.ext-perms { display: flex; flex-wrap: wrap; gap: 6px }
+.ext-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft) }
+.ext-review-card { border-color: #40657c; background: linear-gradient(180deg, rgba(56,189,248,.06), transparent 120px), var(--surface) }
+.ext-perm-list { display: grid; gap: 8px; margin: 12px 0; padding: 0; list-style: none }
+.ext-perm-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 9px; background: var(--page); border: 1px solid var(--line-soft) }
+.ext-perm-item strong { display: block; font-size: .9rem }
+.ext-perm-item small { color: var(--muted); font-size: .82rem }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 24px }
 .card { display: grid; gap: 8px; min-width: 0; min-height: 128px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); text-align: start }
 .card:hover { background: var(--hover); border-color: var(--muted) }
