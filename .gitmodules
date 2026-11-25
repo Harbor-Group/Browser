@@ -1,0 +1,3 @@
+[submodule "shared-procotol"]
+	path = shared-procotol
+	url = https://github.com/Harbor-Group/Shared-Protocol.git
