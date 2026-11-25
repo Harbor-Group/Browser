@@ -1728,7 +1728,7 @@ mod runtime_impl {
                 };
                 win.set_title(Some(&CefString::from("Harbor Browser")));
                 if let Some(mut icon) = image_create() {
-                    let png_bytes = include_bytes!("../../assets/harbor-128.png");
+                    let png_bytes = include_bytes!("../assets/harbor-128.png");
                     icon.add_png(1.0, Some(png_bytes));
                     win.set_window_icon(Some(&mut icon));
                     win.set_window_app_icon(Some(&mut icon));
