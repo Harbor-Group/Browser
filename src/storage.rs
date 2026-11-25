@@ -231,11 +231,12 @@ impl LocalStore {
     }
 
     pub fn count_by_type(&self, item_type: ItemType) -> Result<u64> {
-        self.conn.query_row(
+        let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM local_items WHERE item_type = ?1 AND deleted = 0",
             [item_type.as_str()],
             |row| row.get(0),
-        )
+        )?;
+        Ok(u64::try_from(count).unwrap_or(0))
     }
 
     pub fn record(&self, id: Uuid, item_type: ItemType) -> Result<Option<LocalRecord>> {
